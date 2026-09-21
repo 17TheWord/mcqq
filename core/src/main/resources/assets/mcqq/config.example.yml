@@ -1,0 +1,45 @@
+# MC ↔ QQ bridge. Reload with /qq reload after editing, or restart the server.
+#
+# The secret is never stored here: name the environment variable the server was started with, so this file can
+# be copied, backed up and pasted into a bug report without leaking anything.
+
+# 打开后会把"为什么这条消息没有转发"的每一个判断都写进日志，转发成功时也会打印实际内容。
+# 排障时开，平时关 —— 服务端日志会明显变多。
+debug: false
+
+# 每条消息长什么样。整段删掉就用内置默认，行为与老版本一致（/qq templates 能看到当前生效的值，
+# 也会打印一段可以直接粘贴的写法）。空字符串表示"这个事件不播报"。
+#
+# 可用占位符：{group} {user} {text} {count} {member} {player} {killer} {platform} {time}
+# 写错的占位符不会被替换掉，会原样显示出来 —— 一眼就能看出是拼错了。
+templates:
+  qq-chat: "§b[QQ {group}]§r {user}§7:§r {text}"
+  qq-attachment: "§b[QQ {group}]§r {user} 发了 {count} 个附件（文字里不含它们）"
+  qq-member-add: "§8[QQ {group}] {member} 进了群§r"
+  qq-member-remove: "§8[QQ {group}] {member} 退了群§r"
+  mc-chat: "[MC] {player}: {text}"
+  mc-join: "[MC] {player} 加入了世界"
+  mc-quit: "[MC] {player} 离开了世界"
+  mc-death: "[MC] {player} 死亡（{killer}）"
+
+bots:
+  - id: main                       # any label you like; it shows up in /qq status
+    app-id: "REPLACE_ME"           # QQ 开放平台的 AppID
+    secret-env: QQ_BOT_SECRET      # environment variable holding the AppSecret
+
+    groups:
+      - group-openid: "REPLACE_ME" # the group's openid, not its QQ number
+        label: MC 主群
+        receive-from-qq: true      # QQ -> Minecraft
+        send-to-qq:                # Minecraft -> QQ; delete the list for the default below
+          - chat
+          - join
+          - quit
+          - death
+
+        # 单个群可以覆盖上面 templates 里的任意几个键（只写要改的，其余继承全局）：
+        # templates:
+        #   mc-chat: "[主群] {player}: {text}"
+        #   mc-join: ""              # 这个群不播报进服
+
+# Known send-to-qq values: chat, join, quit, death. Omit the key to take those four.

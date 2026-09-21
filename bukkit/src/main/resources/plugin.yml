@@ -1,0 +1,34 @@
+name: mcqq
+version: '${version}'
+main: com.example.mcqq.bukkit.McQqPlugin
+api-version: '26.1'
+# Folia has no single main thread; the plugin schedules per player and per region instead. Verified by loading
+# this jar on Folia 26.1.2 (see docs/PROGRESS.md).
+folia-supported: true
+authors: [SkiesWorld]
+description: 把聊天/进服/退服/死亡转发到 QQ 群，并把 QQ 群消息播进聊天栏（QQ 官方机器人 API v2）。需要 Paper 系服务端。
+website: https://github.com/skiesworld/mc-qq
+
+# Only the root is declared here. The sub-commands live in the core's command tree, and their names, usage and
+# permission nodes are derived from it — so nothing in this file has to change when one is added, except the two
+# cosmetic lines below (`description` / `usage`, which only /help shows; the real usage comes from the tree).
+#
+# The command deliberately carries no `permission:`: the plugin checks the node of whichever sub-command was
+# asked for, and declaring the root here as well would block anyone who was granted only one of them.
+commands:
+  qq:
+    description: QQ 桥接的状态、模板与重载
+    usage: /qq <status|reload|templates|test|help>
+
+# The root node is granted to operators, and its children come with it. To hand out less, grant a child
+# directly instead — the code checks the node the core derived for the sub-command that was asked for.
+permissions:
+  mcqq:
+    description: 使用 /qq 下的所有子命令
+    default: op
+    children:
+      mcqq.status: true
+      mcqq.reload: true
+      mcqq.templates: true
+      mcqq.test: true
+      mcqq.help: true

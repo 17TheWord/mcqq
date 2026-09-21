@@ -1,0 +1,47 @@
+name: Setup Java & Gradle
+description: 装 JDK、配 Gradle 与缓存、把版本号从 gradle.properties 读进环境变量
+
+# 三个工作流共用这一段，仿照 QueQiaoTool 的 .github/actions/set-java。
+inputs:
+  java-version:
+    description: JDK 版本
+    required: false
+    # 25：两个 mod 平台要它（loom 与 moddev 都按 Java 25 的工具链编译）。core 自己仍是 21 字节码。
+    default: "25"
+
+runs:
+  using: composite
+  steps:
+    - name: Set up JDK
+      uses: actions/setup-java@v5
+      with:
+        java-version: ${{ inputs.java-version }}
+        distribution: temurin
+
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@v6
+
+    - name: Make Gradle Wrapper Executable
+      shell: bash
+      run: chmod +x ./gradlew
+
+    # ~/.gradle/caches 里除了依赖，还有 loom 与 moddev 从 Mojang/NeoForged 拉下来的东西，
+    # 所以这个缓存比一般项目省得更多。
+    - name: Cache Gradle packages
+      uses: actions/cache@v5
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+        restore-keys: |
+          ${{ runner.os }}-gradle-
+
+    # 不预跑 `./gradlew dependencies`（鹊桥那边有这一步）：本项目慢在 MC 工具链的解包/打补丁，
+    # 不在依赖解析上，而那部分已经由上面的缓存覆盖。
+    - name: Get Version
+      shell: bash
+      run: |
+        VERSION=$(grep -E "^mod_version=" gradle.properties | cut -d "=" -f 2)
+        echo "VERSION=$VERSION" >> $GITHUB_ENV
+        echo "VERSION=$VERSION"

@@ -1,0 +1,132 @@
+package com.example.mcqq.core;
+
+import com.example.mcqq.core.command.CommandTree;
+import com.example.mcqq.core.command.RootCommand;
+import com.example.mcqq.core.command.sub.HelpCommand;
+import com.example.mcqq.core.command.sub.ReloadCommand;
+import com.example.mcqq.core.command.sub.StatusCommand;
+import com.example.mcqq.core.command.sub.TestCommand;
+import com.example.mcqq.core.command.sub.TemplatesCommand;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * The bridge's lifecycle: config in, bots up, and the one place {@code /qq reload} can swap them.
+ *
+ * <p>The platform's entry point creates one of these at startup and calls {@link #start()} when the server is
+ * up, {@link #stop()} when it goes down. Everything else — reading the config, keeping the bots, routing both
+ * directions, and the command tree — happens here, so an adapter never repeats that logic.
+ *
+ * <p>Listeners and commands are registered by the platform <em>once</em> and read the current runtime through
+ * this object, which is what lets a reload replace the bots without stacking a second copy of every listener.
+ */
+public final class Bridge {
+
+    private final MinecraftPlatform platform;
+    private final CommandTree commands;
+    private volatile BridgeRuntime runtime;
+    private volatile boolean started;
+
+    public Bridge(MinecraftPlatform platform) {
+        this.platform = platform;
+        this.commands = buildCommands();
+    }
+
+    /** The {@code /qq} tree. The platform registers whatever is in here and never walks it itself. */
+    public CommandTree commands() {
+        return commands;
+    }
+
+    private CommandTree buildCommands() {
+        RootCommand root = new RootCommand();
+        // The tree first, so the one node that has to see all of it can be added to it.
+        CommandTree tree = new CommandTree(root);
+        root.addChild(new StatusCommand(this));
+        root.addChild(new ReloadCommand(this));
+        root.addChild(new TemplatesCommand(this));
+        root.addChild(new TestCommand(this));
+        root.addChild(new HelpCommand(tree));
+        return tree;
+    }
+
+    /** Reads the config and brings the bots up. Never throws into server startup. */
+    public synchronized void start() {
+        started = true;
+        swap(replacement());
+    }
+
+    /** Takes the bots down; the server is going away. */
+    public synchronized void stop() {
+        started = false;
+        swap(null);
+    }
+
+    /** Re-reads the config and replaces the running bots. Returns a one-line summary for the caller. */
+    public synchronized String reload() {
+        if (!started) {
+            return "桥接未运行（服务器还没起来，或已经关了）";
+        }
+        BridgeRuntime replacement = replacement();
+        swap(replacement);
+        return replacement == null ? "配置读取失败，详见服务端日志" : "已重载配置";
+    }
+
+    /** What {@code /qq status} prints: one line per bot, then anything that went wrong. */
+    public List<String> statusLines() {
+        BridgeRuntime active = runtime;
+        if (active == null) {
+            return List.of("桥接未运行（服务器还没起来，或上一次 reload 失败）");
+        }
+        return active.statusLines();
+    }
+
+    /** Queues one Minecraft event for every group that asked for it; does nothing before the first start. */
+    public void forward(BridgeConfig.McEvent event, Map<String, String> values) {
+        BridgeRuntime active = runtime;
+        if (active == null) {
+            return;
+        }
+        try {
+            active.forward(event, values);
+        } catch (RuntimeException e) {
+            // This runs on the server's own event bus, where an exception is not a private matter: it reaches
+            // whatever else is listening, and can land in the middle of a tick. Losing one forwarded line is
+            // the cheaper outcome by a wide margin.
+            Log.error("转发 " + event + " 到 QQ 失败", e);
+        }
+    }
+
+    /** Queues a test message to every configured group; see {@link BridgeRuntime#test()}. */
+    public List<String> test() {
+        BridgeRuntime active = runtime;
+        if (active == null) {
+            return List.of("桥接未运行（服务器还没起来，或已经关了）");
+        }
+        return active.test();
+    }
+
+    /** The config in force, for the commands that report on it. Empty before the first start. */
+    public java.util.Optional<BridgeConfig> config() {
+        BridgeRuntime active = runtime;
+        return active == null ? java.util.Optional.empty() : java.util.Optional.of(active.config());
+    }
+
+    /** The config the platform says to read, or null when it could not be read at all. */
+    private BridgeRuntime replacement() {
+        try {
+            return BridgeRuntime.start(BridgeConfig.load(
+                    BridgeConfig.configPath(platform.configDir())), platform);
+        } catch (Exception e) {
+            Log.error("QQ 桥接读取配置失败；服务器照常运行", e);
+            return null;
+        }
+    }
+
+    private void swap(BridgeRuntime replacement) {
+        BridgeRuntime old = runtime;
+        runtime = replacement;
+        if (old != null) {
+            old.close();
+        }
+    }
+}

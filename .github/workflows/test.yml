@@ -1,0 +1,39 @@
+name: Test
+
+# 每次推 main 与每个 PR 都跑一次完整构建：三个平台的 jar 都编出来，core 的测试全跑。
+# 仿照 QueQiaoTool 的 test.yaml，区别是它跑 `./gradlew check`，这里跑 `build` ——
+# 因为本项目最容易坏的恰恰是"某个平台编不过"，只跑 check 抓不到。
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [ opened, synchronize ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Java & Gradle
+        uses: ./.github/actions/set-java
+        with:
+          java-version: '25'
+
+      - name: Build every platform and run the tests
+        run: ./gradlew clean build --stacktrace
+
+      - name: Keep the three jars around
+        uses: actions/upload-artifact@v4
+        with:
+          name: mc-qq-${{ env.VERSION }}-jars
+          path: |
+            fabric/build/libs/mc-qq-*.jar
+            neoforge/build/libs/mc-qq-*.jar
+            bukkit/build/libs/mc-qq-*.jar
+          if-no-files-found: error

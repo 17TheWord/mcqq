@@ -1,0 +1,257 @@
+# mc-qq — Minecraft ↔ QQ 官方机器人桥（Fabric，Minecraft 26.1.2）
+
+服务端 Fabric mod：把群聊天、进群退群从 QQ 搬进 Minecraft 聊天栏，把玩家聊天、进服退服、死亡按配置广播到 QQ 群。
+QQ 侧走 [qqbot-java-sdk](https://github.com/skiesworld/qqbot-java-sdk) 0.0.4 的网关连接，配置在 `config/mcqq/config.yml`，
+改完 `/qq reload` 生效。
+
+## 文档在哪
+
+| 文件 | 是什么 |
+| --- | --- |
+| [docs/PROGRESS.md](docs/PROGRESS.md) | **当前状态**：哪些已经真机验过、哪些还没、下一步。按轮次记录。 |
+| [docs/MULTIPLATFORM.md](docs/MULTIPLATFORM.md) | 为什么是这个形状：平台/版本矩阵的调研、路线取舍、每条结论的证据。 |
+| [docs/QUEQIAO-NOTES.md](docs/QUEQIAO-NOTES.md) | 从同作者的 QueQiao / QueQiaoTool 抄了什么、没抄什么、为什么。 |
+| [docs/TEMPLATES.md](docs/TEMPLATES.md) | 消息模板与占位符的设计（含第三方占位符库的评估）。 |
+| [THIRD-PARTY.md](THIRD-PARTY.md) | 打包进去的第三方组件与许可证。 |
+| [LICENSE](LICENSE) | MIT。 |
+
+## 工程结构：core + 每个平台一个 adapter
+
+```
+core/      不认识 Minecraft 的那一半：常量、配置、模板、QQ 机器人、双向路由、命令树、以及平台实现的接缝。Java 21 字节码。
+fabric/    Fabric 适配：入口点、4 个事件监听、把 core 的命令树注册进 Brigadier、渲染文本进聊天栏。Java 25。
+neoforge/  NeoForge 适配：同一个形状，事件用 NeoForge 的事件总线、命令挂在 RegisterCommandsEvent 上。Java 25。
+bukkit/    Paper 适配：JavaPlugin 入口、事件监听、把同一棵树接到 plugin.yml 的命令上。Java 25，不需要 MC 工具链。
+```
+
+⚠️ **mod 的 id 是 `mcqq`，和项目名 `mc-qq` 不是一回事。** 原因是 NeoForge 的 modId 只允许
+`^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$` —— **连字符直接被拒**，FML 起不来。`mcqq` 是 Fabric、NeoForge、Bukkit
+三家都接受的拼法，所以：
+
+* **id = `mcqq`**：三个描述符、配置目录（`config/mcqq/`、Paper 侧 `plugins/mcqq/`）、插件名、资源路径、日志器名。
+* **项目名 = `mc-qq`**：仓库名、jar 文件名（`mc-qq-<版本>.jar`）、聊天栏前缀 `[mc-qq]`。
+
+两个拼法各有出处，改的时候别只改一处 —— `gradle.properties` 的 `mod_id` 与 `Constants.MOD_ID` 是同一件事的两侧。
+
+* **接缝只有一个接口**：`MinecraftPlatform { label, configDir, broadcast, onMainThread, registerCommands }`。
+  `MinecraftServer` / `ServerPlayer` / `Component` 一律不进 core —— adapter 把事件拼成句子后交过去，
+  带 `§` 的文本由 adapter 自己渲染（Fabric 用 `Component.literal`，Paper 用 Adventure 的 legacy 反序列化）。
+  core 因此可以脱离游戏编译和测试（21 个测试，全离线）。
+* **命令注册也在 core**：Brigadier 是 Mojang 的独立库（不是 Minecraft 类），所以"遍历命令树建 Brigadier
+  节点"这段泛型化后放在 core，两个 mod 平台各只剩一行（自己的 sender 类型 + OP 等级）。
+* **命令树也在 core，连"分发与权限策略"一起**：`/qq` 的子命令是 core 里的一个节点类，名字、用法行、权限节点
+  全部**由它在树里的位置推导**（`/qq status` → `mcqq.status`），`/qq help` 由树生成；判权限、拒绝话术、
+  输出前缀、以及"命令抛异常不许带崩服务端"都在 `CommandTree.run(...)` 里做一次。
+  平台只需要包一个两方法的 `CommandSource`（`hasPermission` + `reply`）并把参数交出去 ——
+  所以**加一个子命令不用动任何 adapter**。这套骨架参考了鹊桥的 `SubCommand`/`CommandExecutorHelper`，
+  但用接口代替了它的 `Object sender`（少一次 cast，多一层编译期保护）。
+* **常量在 `core/Constants`**：mod id、输出前缀、命令名、权限根 —— 这些是 adapter 之间最容易对不上的东西。
+* **日志也是接缝**：MC 给 slf4j、Bukkit 给 `java.util.logging`，core 只认自己的 `Log.Sink`。
+* **core 编到 release 21**：既拿到虚拟线程，又同时覆盖两代游戏（1.20.5 起是 Java 21，26.1 起是 Java 25）。
+  降到 17 会换来 1.18–1.20.4 那一线，代价是失去虚拟线程。
+* **打包**：每个平台把 `core` 与 SDK/OkHttp/Gson/kotlin/SnakeYAML 一起 shadow 进自己的 jar 并 relocate ——
+  jar 本身是服务端唯一保证存在的 classpath。`core` 自己不带这些依赖（compileOnly）。
+* 加一个平台 = 加一个目录 + 在 `settings.gradle.kts` 里 `include`，不动 core。
+
+### bukkit 这一版的边界
+
+* **只支持 Paper 系**（Paper / Folia / Purpur 等）。聊天走 Paper 的 `AsyncChatEvent`。
+  普通 Bukkit 的 `AsyncPlayerChatEvent` 虽然已废弃，但**在 26.1.2 的聊天链路里还在**
+  （Paper 的 `ChatProcessor` 同时保留了现代与旧两条路径），所以以后要支持 Spigot 是可行的 ——
+  但需要真人打一句话实测过才能声称。
+* **已经在真实 Paper 26.1.2 上加载并跑过**：插件被接受、`onEnable` 跑通、`plugins/mcqq/config.yml` 被写出、
+  `/qq status` 与 `/qq reload` 通过 RCON 实际执行过。
+* **Folia 已经真机加载过**（Folia 26.1.2-8）：插件被接受、命令树可用、平台标识 `folia-26.1.2`，
+  `plugin.yml` 里声明了 `folia-supported: true`，广播在 Folia 上按玩家排到各自的区域线程。
+  **但广播本身没验过**（要一个真人玩家 + 一条入站 QQ 消息）。
+* **Spigot / CraftBukkit 不支持**，而且会**明确告诉你**：启动时检查不到 Paper 的聊天事件类就打印原因并停用自己，
+  而不是抛一句 `NoClassDefFoundError`。
+* **还没证的**：聊天转发（要玩家真的打一句话）。
+
+## 你需要知道的版本事实
+
+* **Minecraft 26.1 起官方不再混淆**，所以没有 Yarn：源码直接用 Mojang 名（`MinecraftServer`、`ServerPlayer`、`Component`）。
+  Yarn 停在 1.21.11，别照旧教程写 `yarnMappings`。
+* **Java 25**。`gradle/gradle-daemon-jvm.properties` 要求 Gradle 自己跑在 25 上（不是只编译到 25）。本机只有 21 时
+  要么让 Gradle 自动装 toolchain，要么手动放一个 JDK 并在**机器级** `gradle.properties`（即
+  `%GRADLE_USER_HOME%/gradle.properties`，默认 `C:\Users\<你>\.gradle\`）里登记：
+  `org.gradle.java.installations.paths=D:/SDK/OpenJDK-21,D:/SDK/jdk-25.0.4.1+1`。这台机器上 foojay 报
+  “No defined toolchain download url for WINDOWS on x86_64”，所以走的是手动那条路（Adoptium 的 zip 要用
+  `Expand-Archive` 解，Git Bash 的 `tar` 不认 zip）。
+* 非混淆用的是 loom 的 **no-remap** 插件 id `net.fabricmc.fabric-loom`：它**没有** `modImplementation` 这些
+  `mod*` 配置，也**没有** `remapJar` 任务，依赖直接写 `implementation`，产物就是 `shadowJar`。旧教程里那两样都来自
+  混淆时代的 `fabric-loom`。
+* 现成版本：fabric-loom **1.18.2**、Loader **0.19.5**、Fabric API **0.155.3+26.1.2**、Gradle wrapper 9.7.1。
+* **26.1 → 26.2 是一个窗口**：描述符写的是范围（Fabric `minecraft: ">=26.1"`、Paper `api-version: '26.1'`），
+  编译对 26.1.2 的产物在 Paper 26.2 上跑通；Fabric 侧换成 26.2 + Fabric API `0.161.0+26.2`
+  **源码一行没改**就编译通过并加载。所以平时不必一版本一 jar，只有 API 真断了才分裂。
+
+## 构建与安装
+
+```bash
+./gradlew build
+# 产物：
+#   fabric/build/libs/mc-qq-<版本>.jar            → Fabric 服务端 mods/
+#   neoforge/build/libs/mc-qq-neoforge-<版本>.jar → NeoForge 服务端 mods/
+#   bukkit/build/libs/mc-qq-bukkit-<版本>.jar     → Paper 系服务端 plugins/
+# 同目录的 -dev.jar 是不带任何依赖的瘦 jar，不要用它。
+# 另有 core/build/libs/mc-qq-core-<版本>.jar，那是内部产物，不需要单独安装。
+```
+
+Fabric 侧需要 Fabric API 一起在 `mods/` 里。三个平台的**打包产物都实机加载过**（不是只跑开发服）：
+Paper 用真服务端 + `plugins/`，Fabric 用真服务端 + `mods/`，NeoForge 用 dev 启动器 + `run/mods/`。SDK 与它的 OkHttp/Gson、kotlin-stdlib、以及 SnakeYAML 都被 relocate 进
+每个平台的 jar，所以不会和 MC 自带的 Gson 抢类，也不和其他 mod 各自带的 kotlin 打架；`slf4j-api` 由服务端提供，
+既不打进 jar 也不 relocate，桥接日志直接进 `logs/latest.log`（Paper 侧走 `java.util.logging`，进同一个文件）。
+
+`./gradlew :fabric:runServer` / `:neoforge:runServer` 跑开发服，工作目录分别是 `fabric/run/`、`neoforge/run/`。
+
+## 配置
+
+首次启动会写出两个文件，都在 `config/mcqq/`（Paper 侧是 `plugins/mcqq/`）：
+
+| 文件 | 是什么 |
+| --- | --- |
+| `config.yml` | 真正生效的配置。你编辑这个。 |
+| `config.example.yml` | 打包的模板副本，**带全部注释**，每次启动刷新，永远描述当前版本。 |
+| `config.yml.bak` | 只在"插件往你的文件里补过键"时出现，是补之前那一版。 |
+
+**升级不会让你手改文件**：插件启动时如果发现你的 `config.yml` 少了新增的键，会先把原文件备份成 `.bak`，
+再把缺的键（带内置默认值）补进去，并在日志里说清补了什么。补进去的值**本来就已经在生效**
+（缺键走内置默认），所以这一步不改变任何行为，只是让你能看见并改它。
+带注释的说明始终在 `config.example.yml` 里 —— 补过的 `config.yml` 顶部会指向它。
+
+**AppSecret 不写进任何文件**，只写它的环境变量名：
+
+```yaml
+bots:
+  - id: main
+    app-id: "123456789"
+    secret-env: QQ_BOT_SECRET
+    groups:
+      - group-openid: "xxxxxxxx"
+        label: MC 主群
+        receive-from-qq: true
+        send-to-qq: [chat, join, quit, death]
+```
+
+* `group-openid` 是群的 openid，不是 QQ 群号。拿它最快的办法：在群里 @ 一次机器人，然后看服务端日志或
+  `/qq status`；也可以在后台的群管理接口里查。
+* `receive-from-qq: false` 就是「只出不进」；`send-to-qq` 缺省取那四项，写 `[]` 即「只进不出」。
+* 一个 bot 多个群、多个 bot 都支持（QQ 侧每个 bot 一条独立连接、独立总线）。
+
+## 消息模板：文案是配置，不是代码
+
+每条消息长什么样都写在配置的 `templates:` 里，改文案不用等新版本。**这一整段可以删掉**，删了就回到内置默认
+（行为与老版本完全一致），`/qq templates` 会打印当前生效的文案和一段可以直接粘贴的写法。
+
+```yaml
+templates:
+  qq-chat: "§b[QQ {group}]§r {user}§7:§r {text}"     # QQ -> MC
+  mc-chat: "[MC] {player}: {text}"                   # MC -> QQ
+  mc-join: "[MC] {player} 加入了世界"
+  mc-death: "[MC] {player} 死亡（{killer}）"
+```
+
+* **可用占位符**：`{group}` `{user}` `{text}` `{count}` `{member}` `{player}` `{killer}` `{platform}` `{time}`。
+  写错的占位符**不会被替换掉**，会原样显示 —— 一眼能看出拼错了；加载时也会报进 `/qq status`。
+* **空字符串 = 不播报**（例如某群 `mc-join: ""` 就是不报进服）。
+* **优先级：群级 > 全局 > 内置默认**。群级只写要覆盖的键，其余继承全局：
+
+```yaml
+    groups:
+      - group-openid: "xxxxxxxx"
+        label: 公告群
+        templates:
+          mc-chat: "[公告] {player}: {text}"   # 只覆盖这一个
+          mc-join: ""                          # 这个群不播报进服
+```
+
+* **`debug: true`** 会把"为什么不转发"的每个判断写进日志（也会打印实际转发的内容）。
+  消息没到 QQ 时先开它，`/qq reload` 就能看到是哪一步挡住的。
+
+* 我们自己的占位符用 `{花括号}`。第三方占位符库（mod 侧 Patbox 的 Text Placeholder API、Bukkit 侧
+  HelpChat 的 PlaceholderAPI）都用 `%百分号%`，所以两者不会打架 —— **但目前 `%...%` 原样显示**，
+  要接它们需要平台侧实现一个钩子，见 [TEMPLATES.md](docs/TEMPLATES.md) 第五节。
+
+## 发布（维护者）
+
+发布链在 `.github/workflows/` 里，仿照 [17TheWord/QueQiao](https://github.com/17TheWord/QueQiao) 的
+`build.yml`（它每个"平台×版本"格子独立构建，再用 `Kir-Antipov/mc-publish` 按各自的 loaders 与
+game-versions 发到 Modrinth / CurseForge）：
+
+| 文件 | 什么时候跑 | 干什么 |
+| --- | --- | --- |
+| `actions/set-java/action.yml` | 被下面两个调用 | 装 JDK 25、配 Gradle 缓存、把 `mod_version` 导出成 `VERSION` |
+| `workflows/test.yml` | 推 main、每个 PR | `./gradlew clean build`（三个平台都编、47 个测试都跑），三个 jar 存成 artifact |
+| `workflows/release.yml` | 打 `v*` 标签 | 校验标签与 `mod_version` 一致 → 构建 → 建 GitHub Release → 三个产物各发一次 mc-publish |
+
+本项目只有三个产物、一次构建就出全，所以**没有抄 QueQiao 的 `matrix.sh` 矩阵**（那是它有十几个格子才需要的）；
+发布那一步的形态照抄：**一个产物一次 mc-publish**，各自声明 `loaders` 与 `game-versions`。
+
+**发一次要做的**：
+
+1. 改 `gradle.properties` 的 `mod_version`，提交
+2. `git tag v0.1.0 && git push origin v0.1.0`
+3. 想发到 Modrinth / CurseForge 的话，先在平台上把项目建好，然后在仓库
+   Settings → Secrets and variables → Actions 里配：Variables `MODRINTH_ID` / `CURSEFORGE_ID`，
+   Secrets `MODRINTH_TOKEN` / `CURSEFORGE_TOKEN`。**没配也不会失败** —— 那几步会被跳过，GitHub Release 照常创建。
+
+标签里带连字符（`v0.2.0-beta.1`）会被当成预发布，Modrinth 上的 version-type 也会是 beta。
+
+## 许可证
+
+代码是 **MIT**（见 [LICENSE](LICENSE)）—— 与同作者的 QueQiaoTool 一致。产物里**打包了别人的代码**
+（QQ 官方 SDK、OkHttp、Gson、SnakeYAML、Kotlin 等，都是 Apache-2.0），清单在
+[THIRD-PARTY.md](THIRD-PARTY.md)，两份文件也都打进了 jar。
+
+## 命令（需要 OP 2 / `mcqq` 权限）
+
+| 命令 | 作用 |
+| --- | --- |
+| `/qq status` | 每个 bot 的在线状态、自身 id、绑定的群与方向，外加配置里读出来的问题 |
+| `/qq reload` | 重读配置，换掉正在跑的 bot；MC 侧监听器只注册一次，所以不会重复转发 |
+| `/qq templates` | 当前生效的消息模板、可用占位符，缺 `templates:` 段时还会打印可粘贴的写法 |
+| `/qq test` | 往每个配置的群各发一条测试消息，验证凭证与群 openid（结果见日志；不阻塞服务器） |
+| `/qq help` | 列出所有子命令（由命令树生成，不手写） |
+
+这几个是 core 里的几个节点；平台侧只是把整棵树注册进去，所以**加子命令不用改 adapter**。
+Fabric 侧走 Brigadier（带补全），Paper 侧走 `plugin.yml` 的命令 + 自己的补全，权限节点在两边都由路径推导：
+`mcqq` 是根，`mcqq.status` / `mcqq.reload` / `mcqq.templates` / `mcqq.test` / `mcqq.help` 是子节点
+（`plugin.yml` 里用 `children` 挂上，默认给 OP）。
+
+启动时凭证不对（appid/secret 错、后台没开通）不会拖住服务器：bot 起不来就记在 `/qq status` 与日志里，
+修好配置后 `/qq reload` 即可，不必重启。
+
+## 两个方向具体搬什么
+
+**QQ → MC**：`GROUP_MESSAGE_CREATE`（全量群消息）与 `GROUP_AT_MESSAGE_CREATE`（@ 机器人）→
+`§b[QQ 群名]§r 昵称: 文本`；附件只报数量与「文字里不含它们」（官方 payload 里文本与附件是平级字段，
+没有位置信息）。`GROUP_MEMBER_ADD/REMOVE` → `[QQ 群名] xxx 进了群/退了群`。单聊（别人私聊机器人）不转发。
+同一条 `msg_id` 被平台重推时只播一次（SDK 还没做入站去重，这里先挡着）。
+
+**MC → QQ**：玩家聊天、进服、退服、死亡（带凶手名），前缀 `[MC]`，发送时去掉 `§`颜色码。
+这属于平台的主动消息，会被频控或送去审核：失败/进审核只记日志，绝不在 tick 里等待，也绝不让聊天因为 QQ 而失败。
+
+## 开发用的测试服（可以删）
+
+`bukkit/run`、`bukkit/run-folia`、`fabric/run`、`fabric/run-prod`、`neoforge/run` 是验证用的服务端目录
+（合计约 800M），都在 `.gitignore` 里、不进仓库。它们是**验证环境**：留着，下次改完直接起服复验，不用重新下载
+（Mojang 那边现在限速）。要腾空间可以直接删整个目录 —— 代价是下次要重新拉服务端与依赖。
+最可以删的是 `bukkit/run-folia`（Folia 已经验过，它的缓存还是从 `bukkit/run` 复制过去的）。
+
+## 线程
+
+QQ 的事件跑在 mod 自己的虚拟线程上（`EventBus(Executor)` 注进去），进 MC 聊天栏时 `server.execute(...)` hop 回主线程；
+MC 的事件在 tick 里只做一次投递。所以：QQ 慢不卡服务器，服务器繁忙也不排队卡 QQ。
+
+## 离线证到了什么，什么还得靠真机
+
+`./gradlew build` 跑 9 个测试，全离线：配置解析（含首次写出模板、占位符被跳过而不是硬连）、出站请求的线上形状
+（MockWebServer 假平台：`POST /v2/groups/{openid}/messages`、`Authorization: QQBot <token>`、`msg_type:0`），
+以及平台拒绝/进审核时 `send` 只记日志、不重试、不抛给 tick。relocate 后的 jar 也单独点过一次：从 jar 里造 client、
+解析一条群消息 payload，字段照旧。
+
+真机跑过 `./gradlew runServer`（26.1.2 + Fabric API 0.155.3）：mod 加载、监听器注册、`SERVER_STARTED` 写出模板并
+把「还是 REPLACE_ME」报进日志。**没证到的**：`/qq status` 与 `/qq reload` 的实际执行——loom 的 runServer 从管道喂
+控制台命令不工作（原版 `stop` 同样报 "An unexpected error occurred trying to execute that command"），要进游戏用 OP
+玩家按 `/qq` 试；以及真实群消息的往返、`author`/`mentions` 在真 payload 里到底长什么样（见 SDK README 的已知边界）。
