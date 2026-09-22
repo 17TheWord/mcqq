@@ -29,14 +29,16 @@ name: Platforms
 on:
   workflow_call:
     # 两个筛选条件直接转发给 action。调用方不传就是"全部"，所以 release 那边一个字都不用写。
+    # ⚠️ 这里只能是 string —— `choice` 只有 workflow_dispatch 支持。手动入口（test.yml）用了下拉框，
+    # 到这一层已经是普通字符串了；本层支持逗号分隔的列表。
     inputs:
       platforms:
-        description: 要构建哪些平台，逗号分隔（平台名如 forge，或完整窗口名如 forge-1.20.1）；留空 = 全部
+        description: 要构建哪些平台，逗号分隔（平台名如 forge，或完整窗口名如 forge-1.20.1）；留空或 all = 全部
         required: false
         type: string
         default: ""
       versions:
-        description: 要构建哪些 MC 窗口，逗号分隔（26.1 / 1.20.1）；留空 = 全部。与 platforms 是"与"的关系
+        description: 要构建哪些 MC 窗口，逗号分隔（26.1 / 1.20.1）；留空或 all = 全部。与 platforms 是"与"的关系
         required: false
         type: string
         default: ""

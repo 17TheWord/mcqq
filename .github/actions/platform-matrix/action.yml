@@ -16,12 +16,12 @@ inputs:
   platforms:
     description: >-
       要构建哪些平台，逗号分隔。每一项可以是平台名（fabric / neoforge / forge / paper / spigot），
-      也可以是完整窗口名（forge-1.20.1）。留空 = 全部。
+      也可以是完整窗口名（forge-1.20.1）。留空或 `all` = 全部。
     required: false
     default: ""
   versions:
     description: >-
-      要构建哪些 MC 窗口，逗号分隔（26.1 / 1.20.1）。留空 = 全部。
+      要构建哪些 MC 窗口，逗号分隔（26.1 / 1.20.1）。留空或 `all` = 全部。
       与 platforms 是"与"的关系，所以 forge + 1.20.1 只会得到 forge-1.20.1。
     required: false
     default: ""
@@ -66,6 +66,10 @@ runs:
         # 空格和大小写都不该让筛选失灵。
         WANT_PLATFORMS=$(echo "$WANT_PLATFORMS" | tr -d ' ' | tr 'A-Z' 'a-z')
         WANT_VERSIONS=$(echo "$WANT_VERSIONS" | tr -d ' ' | tr 'A-Z' 'a-z')
+        # `all` 是手动入口那个下拉框的"全部"（workflow_dispatch 的 choice 不能留空，所以得有个显式的词）。
+        # 程序化调用直接传空串 —— 两者等价。
+        [ "$WANT_PLATFORMS" = "all" ] && WANT_PLATFORMS=""
+        [ "$WANT_VERSIONS" = "all" ] && WANT_VERSIONS=""
 
         # 这个窗口名要不要。名字的格式是「平台-窗口起点」，所以从两头切：
         #   forge-1.20.1  →  平台 forge，窗口 1.20.1

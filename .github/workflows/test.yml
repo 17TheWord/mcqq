@@ -3,11 +3,10 @@ name: Test
 # 推 main 与每个 PR 都跑：**每个平台各一格**，并行，哪一格挂了就是哪个平台坏了。
 # 平台清单来自 .github/workflows/platforms.yml —— 加平台只改那一个文件。
 #
-# 也可以手动跑（Actions → Test → Run workflow），用两个输入挑"要构建哪几个"：
-#   platforms: forge             → forge 的全部窗口
-#   platforms: forge-1.20.1      → 只要这一个窗口（平台名或完整窗口名都行）
-#   versions:  26.1              → 只要 26.1 那一档
-#   两个都留空                     → 全部，与 push 时一样
+# 也可以手动跑（Actions → Test → Run workflow），用两个下拉框挑"要构建哪几个"：
+#   platforms: forge + versions: all      → forge 的全部窗口
+#   platforms: forge + versions: 1.20.1   → 就那一个窗口
+#   两个都 all                             → 全部，与 push 时一样
 # 产物照常传成 artifact，所以"我想要一个 forge-1.20.1 的 jar"就是这么拿。
 on:
   push:
@@ -17,14 +16,29 @@ on:
     types: [ opened, synchronize ]
   workflow_dispatch:
     inputs:
+      # 用 choice 而不是自由文本：平台和窗口都只有几个，下拉框直接挡住手打错。
+      # ⚠️ `choice` 只有 workflow_dispatch 支持 —— workflow_call 的 type 只允许 boolean/number/string。
+      # 所以下面那两层（platforms.yml → action）收到的仍是字符串，它们照样支持逗号分隔的列表，
+      # 程序化调用可以传 `forge,paper` 或完整窗口名 `forge-1.20.1`；下拉框这边一次只能挑一个。
       platforms:
-        description: 要构建哪些平台，逗号分隔（平台名如 forge，或完整窗口名如 forge-1.20.1）；留空 = 全部
-        required: false
-        default: ""
+        description: 要构建哪个平台
+        type: choice
+        default: all
+        options:
+          - all
+          - fabric
+          - neoforge
+          - forge
+          - paper
+          - spigot
       versions:
-        description: 要构建哪些 MC 窗口，逗号分隔（26.1 / 1.20.1）；留空 = 全部
-        required: false
-        default: ""
+        description: 要构建哪个 MC 窗口
+        type: choice
+        default: all
+        options:
+          - all
+          - "26.1"
+          - "1.20.1"
 
 jobs:
   platforms:
