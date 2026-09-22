@@ -74,6 +74,14 @@ public final class QqToMc {
         Log.debug("收到 " + target.label() + " 的消息：openid=" + sender.openid()
                 + " member_role='" + sender.memberRole() + "' roles=" + sender.roleIds()
                 + " 内容：" + message.content());
+        // mentions 里每个 User 的字段全打出来 —— "at 的是不是当前 bot"要靠它跟 <@...> 里的 id 对上，
+        // 而那个 id 跟 selfId() 不是一个体系（真机实测），所以得先看清它的形状。
+        for (io.github.skiesworld.qqbot.model.User mentioned : message.mentions()) {
+            Log.debug("  mentions 一项：id=" + mentioned.id + " user_openid=" + mentioned.userOpenid
+                    + " member_openid=" + mentioned.memberOpenid + " union_openid=" + mentioned.unionOpenid
+                    + " bot=" + mentioned.bot + " username=" + mentioned.username);
+        }
+        Log.debug("  mentionedBot()=" + message.mentionedBot());
         if (!target.receivesFromQq()) {
             Log.debug("群 " + target.label() + " 配成了只出不进，忽略这条消息");
             return;
