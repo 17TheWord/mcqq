@@ -109,7 +109,7 @@ final class McCommands {
      * {@code 40034024} msg_id 无效或越权（那条消息没 @ 机器人）、{@code 40034005} / {@code 304103}
      * 已过期、{@code 40034128} 时间或次数超限。
      */
-    private static boolean replyPathIsClosed(int errCode) {
+    static boolean replyPathIsClosed(int errCode) {
         return errCode == 40034024 || errCode == 40034005 || errCode == 304103 || errCode == 40034128;
     }
 

@@ -197,6 +197,20 @@ class McCommandsTest {
     }
 
     @Test
+    void onlyTheErrorsThatMeanTheReplyPathIsClosedSwitchToProactive() {
+        // 真机上抓到的那个：群里没 @ 机器人的消息，msg_id 用不了。
+        assertTrue(McCommands.replyPathIsClosed(40034024), "msg_id 无效或越权");
+        assertTrue(McCommands.replyPathIsClosed(40034005), "msg_id 已过期");
+        assertTrue(McCommands.replyPathIsClosed(304103), "消息 ID 已过期");
+        assertTrue(McCommands.replyPathIsClosed(40034128), "被动回复时间或次数超限");
+
+        // 别的错误（内容违规、被禁言）不该改走主动消息 —— 换个通道发同样的内容只会再失败一次。
+        assertFalse(McCommands.replyPathIsClosed(40034006), "消息内容违规");
+        assertFalse(McCommands.replyPathIsClosed(40054002), "机器人被禁言");
+        assertFalse(McCommands.replyPathIsClosed(0));
+    }
+
+    @Test
     void thePrefixAloneExplainsItself() throws Exception {
         try (FakeRcon rcon = new FakeRcon("hunter2", OUTPUT)) {
             McCommands commands = commands(config(rcon));
