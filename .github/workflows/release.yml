@@ -33,7 +33,7 @@ jobs:
 
   build:
     needs: platforms
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     outputs:
       prerelease: ${{ steps.tag.outputs.prerelease }}
 
@@ -101,7 +101,7 @@ jobs:
     needs: [ platforms, build ]
     # 没有项目 id 就整段跳过：这一步是"上架"，不是"发版"。
     if: vars.MODRINTH_ID != '' || vars.CURSEFORGE_ID != ''
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.platforms.outputs.matrix) }}

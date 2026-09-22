@@ -12,6 +12,12 @@ name: Platforms
 #
 # 为什么 build 不在这里做：本项目一次 `./gradlew build` 就出全部产物，而 loom/moddev 的工具链是共享的，
 # 拆成矩阵会把 MC 工具链各下一遍。矩阵真正需要的地方是**发布**（每个产物一次 mc-publish）与**每平台一份产物**。
+#
+# 跑在哪个 runner：三个工作流都钉 `ubuntu-26.04`，不用 `ubuntu-latest`。
+# `-latest` 会在 GitHub 迁移时**悄悄换掉底层系统**（2026-10-19 起指向 Ubuntu 26），而 CI 的工具链对系统版本
+# 敏感（glibc、Java、构建工具都跟着走）；钉死换来可复现。代价是 GitHub 弃用某个镜像时要手动跟进 ——
+# 届时把 platforms / test / release 三处一起改（这个 label 没法像平台清单那样共用：`runs-on` 要在 job
+# 启动前就定下来，而读一个共享值本身得先跑一个 job）。
 on:
   workflow_call:
     outputs:
@@ -27,7 +33,7 @@ on:
 
 jobs:
   platforms:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     outputs:
       version: ${{ steps.version.outputs.version }}
       game_versions: ${{ steps.version.outputs.game_versions }}

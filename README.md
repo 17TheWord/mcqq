@@ -194,6 +194,10 @@ templates:
 `build.yml`（它每个"平台×版本"格子独立构建，再用 `Kir-Antipov/mc-publish` 按各自的 loaders 与
 game-versions 发到 Modrinth / CurseForge）：
 
+CI 跑在 **`ubuntu-26.04`**（钉死，不用 `ubuntu-latest`）：`-latest` 会在 GitHub 迁移时悄悄换掉底层系统
+（2026-10-19 起指向 Ubuntu 26），而构建工具链对系统版本敏感。GitHub 弃用某个镜像时要手动把这
+三处一起改。
+
 **"有哪些平台"只写在一个地方**：`workflows/platforms.yml`（可复用工作流）。test 与 release 都 `uses:` 它，
 所以加平台、改 jar 名、改 loaders 只动那一个文件；而**版本事实**（`mod_version`、`publish_game_versions`、
 `minecraft_version_range`）的唯一出处是 `gradle.properties`，platforms.yml 只负责读出来。
