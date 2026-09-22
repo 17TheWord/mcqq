@@ -1,0 +1,80 @@
+// Groovy + ModDevGradle, following the official 1.20.1 MDK
+// (NeoForgeMDKs/MDK-Forge-1.20.1-ModDevGradle) rather than the ForgeGradle one.
+//
+// 为什么这不是一套独立的构建：1.20.1 的 ForgeGradle 是第 6 代（要 Gradle 8），26.1 的是第 7 代（要 Gradle 9.3+），
+// 而同一个 plugin id 在一个构建里只能有一个版本。ModDevGradle 的 `legacyforge` 是**同一个 artifact** 的 addon、
+// 与上面 NeoForge 模块用的 `net.neoforged.moddev` 同版本，所以这个窗口就待在这个构建里。
+// 依据与验证记录见 docs/MULTIPLATFORM.md §8.6。
+plugins {
+    id 'java'
+    id 'net.neoforged.moddev.legacyforge'
+    id 'com.gradleup.shadow'
+}
+
+base {
+    // 名字里带平台与窗口：同一个平台会有多个窗口，只写版本号会撞名。
+    archivesName = "${archives_base_name}-forge-1.20.1"
+}
+
+// 1.18–1.20.4 跑在 Java 17 上。**不设 toolchain**：daemon 已经跑在一个够新的 JDK 上、能产出 release 17，
+// 而要求一个 17 的 toolchain 会让这台机器再去下一个 JDK（本机只有 JDK 25）。
+legacyForge {
+    version = forge_1201_version
+
+    runs {
+        server {
+            server()
+            programArgument '--nogui'
+        }
+    }
+
+    // 哪个 source set 是 mod。名字必须是 modId —— 见 gradle.properties 里 mod_id 的说明。
+    //
+    // ⚠️ 这一代的 dev run **看不见兄弟项目的 classes 目录**：Forge 1.20.1 的模块系统把类路径建成一串
+    // **jar**（见 `build/moddev/serverLegacyClasspath.txt`，85 条全是 jar），而 `project(':core')` 在同一构建内
+    // 解析成的是 classes 目录。症状很迷惑 —— mod 加载成功、模组列表里也有，但构造器一碰 core 的类就
+    // `NoClassDefFoundError: com/example/mcqq/core/Log$Sink`。NeoForge 26.x 没有这个毛病。
+    //
+    // 所以这个窗口的验证方式是**验打包产物**：`-PjarOnly` 不把 source set 当 mod，改把
+    // `build/libs/mc-qq-forge-1.20.1-<版本>.jar` 放进 `run/mods/` 再起服 —— 那也正是服主拿到的东西
+    // （含 shadow 与 reobf）。两个一起加载会让同一个 modId 被发现两次，所以这里是二选一。
+    if (!project.hasProperty('jarOnly')) {
+        mods {
+            "${mod_id}" { sourceSet sourceSets.main }
+        }
+    }
+}
+
+dependencies {
+    // `add` 而不是 `bundled ...`：Groovy 里同名局部变量会遮蔽依赖处理器的动态方法。
+    add('bundled', project(':core'))
+}
+
+tasks.named('jar') { archiveClassifier = 'dev' }
+
+// Forge ≤1.20.1 用 SRG 作为中间名，所以发出去的 jar 必须重混淆。我们发的是 shadow 那个
+// （只有它带着 SDK），所以要 reobf 的是它 —— 官方 LEGACY.md 给的就是这个接法。
+obfuscation {
+    reobfuscate(tasks.named('shadowJar'), sourceSets.main)
+}
+
+tasks.named('processResources') {
+    inputs.property 'version', version
+    filesMatching(['META-INF/mods.toml', 'pack.mcmeta']) {
+        expand(
+                version: version,
+                mod_id: mod_id,
+                mod_name: mod_name,
+                mod_authors: mod_authors,
+                mod_license: mod_license,
+                mod_url: mod_url,
+                mod_description: mod_description,
+                forge_1201_loader_version_range: forge_1201_loader_version_range,
+                forge_1201_minecraft_version_range: forge_1201_minecraft_version_range)
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 17
+}

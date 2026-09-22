@@ -78,6 +78,7 @@ jobs:
             fabric/fabric-26.1/build/libs/mc-qq-*.jar
             neoforge/neoforge-26.1/build/libs/mc-qq-*.jar
             forge/forge-26.1/build/libs/mc-qq-*.jar
+            forge/forge-1.20.1/build/libs/mc-qq-*.jar
             spigot/spigot-26.1/build/libs/mc-qq-*.jar
             paper/paper-26.1/build/libs/mc-qq-*.jar
           if-no-files-found: error
@@ -91,6 +92,7 @@ jobs:
             "fabric/fabric-26.1/build/libs/mc-qq-fabric-26.1-${{ needs.platforms.outputs.version }}.jar" \
             "neoforge/neoforge-26.1/build/libs/mc-qq-neoforge-26.1-${{ needs.platforms.outputs.version }}.jar" \
             "forge/forge-26.1/build/libs/mc-qq-forge-26.1-${{ needs.platforms.outputs.version }}.jar" \
+            "forge/forge-1.20.1/build/libs/mc-qq-forge-1.20.1-${{ needs.platforms.outputs.version }}.jar" \
             "spigot/spigot-26.1/build/libs/mc-qq-spigot-26.1-${{ needs.platforms.outputs.version }}.jar" \
             "paper/paper-26.1/build/libs/mc-qq-paper-26.1-${{ needs.platforms.outputs.version }}.jar")
           if [ "${{ steps.tag.outputs.prerelease }}" = "true" ]; then
@@ -129,5 +131,6 @@ jobs:
           version: ${{ needs.platforms.outputs.version }}+${{ matrix.name }}
           version-type: ${{ needs.build.outputs.prerelease == 'true' && 'beta' || 'release' }}
           loaders: ${{ matrix.loaders }}
-          game-versions: ${{ needs.platforms.outputs.game_versions }}
+          # 每个窗口各自声明（`publish_game_versions_*`）：26.x 的 jar 装不到 1.20.1 上，共用一份列表会误导人。
+          game-versions: ${{ matrix.game-versions }}
           files: jars/${{ matrix.jar }}

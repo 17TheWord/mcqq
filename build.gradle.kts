@@ -6,7 +6,10 @@ plugins {
     id("com.gradleup.shadow") version "9.6.1" apply false
     // NeoForge's toolchain. Its docs only publish Groovy examples, which is why that one project uses
     // build.gradle instead of build.gradle.kts — a copy of upstream beats a translation of it.
+    // `legacyforge` is an addon of the *same* artifact, released at the same version, and it is what builds
+    // Forge 1.17–1.20.1 — which is why the 1.20.1 window does not need a build of its own.
     id("net.neoforged.moddev") version "2.0.147" apply false
+    id("net.neoforged.moddev.legacyforge") version "2.0.147" apply false
     // Forge's toolchain. Forge and NeoForge split at 1.20.2 and their Gradle plugins share nothing, which is
     // why each needs its own project — the same conclusion the platform research came to.
     id("net.minecraftforge.gradle") version "[7.0.17,8)" apply false
@@ -63,6 +66,19 @@ subprojects {
         dependencies {
             add("bundled", "io.github.skiesworld:qqbot-java-sdk:${property("qqbot_sdk_version")}")
             add("bundled", "org.yaml:snakeyaml:${property("snakeyaml_version")}")
+        }
+        // 两个**只含注解**的传递依赖，别裹进来：gson 带来 com.google.errorprone:error_prone_annotations，
+        // kotlin-stdlib 带来 org.jetbrains:annotations（包是 org.jetbrains.annotations 与
+        // org.intellij.lang.annotations）。它们运行时毫无用处，但 relocate 规则匹配不到它们 ——
+        // 规则按包名匹配（`com.google.gson`、`kotlin`），而这两个库的包名不同，于是原样进了 jar。
+        //
+        // 后果不是"多几 KB"，而是 Forge 1.20.1 直接拒绝启动：
+        //   java.lang.module.ResolutionException: Modules com.google.errorprone.annotations and mcqq
+        //   export package com.google.errorprone.annotations.concurrent to module minecraft
+        // —— 它的模块系统不允许同一个包出现在两个模块里。26.x 的加载器不检查这个，所以只有这一代炸。
+        configurations.named("bundled") {
+            exclude(group = "com.google.errorprone", module = "error_prone_annotations")
+            exclude(group = "org.jetbrains", module = "annotations")
         }
         tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar") {
             configurations = listOf(bundled)

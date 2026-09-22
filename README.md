@@ -25,17 +25,24 @@ QQ 侧走 [qqbot-java-sdk](https://github.com/skiesworld/qqbot-java-sdk) 0.0.4 �
 所以项目路径是 `平台:窗口`，产物名也带窗口（否则两个窗口会撞名）：
 
 ```
-core/                          不认识 Minecraft 的那一半：常量、配置、模板、QQ 机器人、双向路由、命令树、接缝。Java 21 字节码
+core/                          不认识 Minecraft 的那一半：常量、配置、模板、QQ 机器人、双向路由、命令树、接缝。**Java 17 字节码**
 bukkit-common/                 Bukkit 一族的共享部分（**编译对 spigot-api**）：平台基类、命令、JUL 日志、进服/退服/死亡监听
 fabric/fabric-26.1/            Fabric 适配（loom）：入口点、4 个事件监听、把命令树注册进 Brigadier。Java 25
 neoforge/neoforge-26.1/        NeoForge（moddev）：事件用 NeoForge 的事件总线、命令挂 RegisterCommandsEvent
 forge/forge-26.1/              Forge（ForgeGradle）：26.x 的事件 API 与 NeoForge 完全不同（每个事件自带静态 BUS）
+forge/forge-1.20.1/            Forge 1.20.1（ModDevGradle 的 legacyforge）：**同一个构建里的另一个窗口**，Java 17，产物要 reobf 到 SRG
 spigot/spigot-26.1/            Spigot 变体：入口、老聊天事件（AsyncPlayerChatEvent）、`§` 字符串渲染
 paper/paper-26.1/              Paper 变体：入口、新聊天事件（AsyncChatEvent）、Adventure 渲染 + Folia 调度
 ```
 
 窗口名用**窗口起点**（`fabric-26.1` 覆盖 `[26.1, 26.2]`，范围写在描述符里）。
-产物：`mc-qq-fabric-26.1-<版本>.jar` / `-neoforge-26.1-` / `-forge-26.1-` / `-spigot-26.1-` / `-paper-26.1-`。
+产物：`mc-qq-fabric-26.1-<版本>.jar` / `-neoforge-26.1-` / `-forge-26.1-` / `-forge-1.20.1-` / `-spigot-26.1-` / `-paper-26.1-`。
+
+**`forge/forge-1.20.1` 为什么不用独立构建**：1.20.1 的 ForgeGradle 是第 6 代（要 Gradle 8），26.1 的是第 7 代
+（要 Gradle 9.3+），而同一个 plugin id 在一个构建里只能有一个版本。但 ModDevGradle 的
+`net.neoforged.moddev.legacyforge` 是**同一个 artifact** 的 addon、与 `net.neoforged.moddev` 同版本，
+所以这一代就待在这个构建里。依据与实测记录见 [docs/MULTIPLATFORM.md](docs/MULTIPLATFORM.md) §8.6。
+⚠️ 它的验证方式与别的平台不同（dev run 看不见兄弟项目的 classes 目录，见那份文档"六"）。
 
 **Bukkit 一族装哪个**：Paper 系（含 Purpur，以及 **Folia**）装 `paper` 那份；Spigot / CraftBukkit 装 `spigot` 那份。
 **装错了会明确告诉你**：spigot 那份在 Paper 上会打印一句原因并停用自己（反过来也一样），
@@ -224,8 +231,10 @@ CI 跑在 **`ubuntu-26.04`**（钉死，不用 `ubuntu-latest`）：`-latest` �
 三处一起改。
 
 **"有哪些平台"只写在一个地方**：`workflows/platforms.yml`（可复用工作流）。test 与 release 都 `uses:` 它，
-所以加平台、改 jar 名、改 loaders 只动那一个文件；而**版本事实**（`mod_version`、`publish_game_versions`、
+所以加平台、改 jar 名、改 loaders 只动那一个文件；而**版本事实**（`mod_version`、`publish_game_versions_*`、
 `minecraft_version_range`）的唯一出处是 `gradle.properties`，platforms.yml 只负责读出来。
+⚠️ `game-versions` 是**每个窗口一份**（`publish_game_versions_26_1` / `_1_20_1`）—— 26.x 的 jar 装不到
+1.20.1 上，共用一份列表会让发布页误导人。
 
 | 文件 | 什么时候跑 | 干什么 |
 | --- | --- | --- |

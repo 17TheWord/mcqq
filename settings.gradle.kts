@@ -36,4 +36,8 @@ include("neoforge:neoforge-26.1")
 val withForge = startParameter.projectProperties["withForge"].toBoolean()
 if (withForge) {
     include("forge:forge-26.1")
+    // 1.20.1 那一代**不**需要独立的 legacy 构建：官方 MDK 走 ModDevGradle 的
+    // `net.neoforged.moddev.legacyforge`，而它与 neoforge 用的 `net.neoforged.moddev` 是同一个
+    // artifact 同一个版本，所以它只是同一构建里的另一个窗口。依据见 docs/MULTIPLATFORM.md §8.6。
+    include("forge:forge-1.20.1")
 }

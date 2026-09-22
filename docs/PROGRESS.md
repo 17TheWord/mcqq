@@ -31,6 +31,68 @@
 
 **没有落地任何代码**。`refs/` 里的 1.20.1 MDK 与鹊桥源码是本次的唯一证据来源。
 
+## forge-1.20.1 窗口：已落地并在真机跑通（2026-09-22，最新）
+
+从"复核可行性"变成了"做完了"。`forge/forge-1.20.1/` 是**主构建**里的一个子项目（用 ModDevGradle 的
+`net.neoforged.moddev.legacyforge`，与 neoforge 用的 `net.neoforged.moddev` 同 artifact 同版本）——
+**没有建 `legacy/` 独立构建**，§8.6 的第一版结论被彻底推翻。
+
+**产物**：`mc-qq-forge-1.20.1-0.1.0.jar`，4.18 MB，含 core + relocate 后的 SDK，字节码 **61（Java 17）**；
+`reobfShadowJar` 把 Minecraft 引用改成了 SRG 名（`getName()` → `m_7755_`、`getEntity()` → `m_7639_`，
+`javap` 实测，不是"任务跑了"就算）。
+
+**真机验证**：`./gradlew :forge:forge-1.20.1:runServer -PwithForge=true -PjarOnly`
+（把**打包产物**丢进 `run/mods/`）在真 Forge 1.20.1（47.4.23）上：
+
+```
+[mcqq/]: mcqq loaded; the QQ bridge comes up with the server
+Done (4.353s)! For help, type "help"
+[mcqq/]: wrote the default config to ...\run\config\mcqq\config.yml; fill in app-id and the group openids
+[mcqq/]: config: bot main still has the REPLACE_ME app-id from the template, skipped
+```
+
+配置落在 `run/config/mcqq/config.yml`（Forge 的配置目录）✓，桥随服务器起来 ✓，健康的跑了 5 分钟 ✓。
+
+### 适配器移植：比预估的小得多
+
+`ServerChatEvent` 在 1.20.1 上**也有** `getUsername()` / `getRawText()`
+（从 `forge-1.20.1-47.4.23-sources.jar` 里读的，不是猜的）→ **聊天那一行一个字都没改**。
+真正要改的只有四处：
+
+| | 26.x | 1.20.1 |
+| --- | --- | --- |
+| 事件注册 | `ServerChatEvent.BUS.addListener(...)`（每事件一个静态 BUS） | `MinecraftForge.EVENT_BUS.addListener(...)`（一个中心总线） |
+| 入口构造器 | `McQqMod(FMLJavaModLoadingContext context)` | 无参构造 |
+| 权限 | `Commands.hasPermission(Commands.LEVEL_GAMEMASTERS)` | `source.hasPermission(2)` |
+| 版本号 | `SharedConstants.getCurrentVersion().name()` | `.getName()` |
+
+（`IEventBus.addListener(Consumer<T>)` 在 eventbus 6.2.33 里 `javap` 确认存在。）
+**一轮编译就过，零错误零警告。**
+
+### ⚠️ 两个只有这一代才会暴露的坑
+
+**1. dev run 看不见兄弟项目的 classes 目录。**
+Forge 1.20.1 的模块系统把类路径建成一串 **jar**（`build/moddev/serverLegacyClasspath.txt`，85 条全是 jar），
+而 `project(':core')` 在同一构建内解析成的是 classes 目录。症状极迷惑：**mod 加载成功、模组列表里也有，
+构造器一碰 core 就 `NoClassDefFoundError: com/example/mcqq/core/Log$Sink`**。NeoForge 26.x 没这毛病。
+→ 所以这个窗口的验证方式定为**验打包产物**：`-PjarOnly` 不把 source set 当 mod（否则同一 modId 被发现两次），
+改把 `build/libs/` 里那个 jar 放进 `run/mods/` —— 那也正是服主拿到的东西（含 shadow 与 reobf）。
+
+**2. jar 里带了没 relocate 的注解库 → Forge 1.20.1 直接拒绝启动。**
+
+```
+java.lang.module.ResolutionException: Modules com.google.errorprone.annotations and mcqq
+export package com.google.errorprone.annotations.concurrent to module minecraft
+```
+
+`com.google.errorprone:error_prone_annotations`（gson 传递）与 `org.jetbrains:annotations`
+（kotlin-stdlib 传递）**只含注解、运行时无用**，但 relocate 规则按**包名**匹配（`com.google.gson`、`kotlin`），
+匹配不到它们的包（`com.google.errorprone.annotations`、`org.jetbrains.annotations`）→ 原样进了 jar。
+它的模块系统不允许同一个包出现在两个模块里，26.x 的加载器不检查这个，所以只有这一代炸。
+→ 修法：在根构建的 `bundled` 里 `exclude` 掉这两个 artifact（**所有平台一起受益**，jar 还小了 0.2MB）。
+→ **教训**：relocate 规则要按"包里**实际**有什么"验，不能按"我写了哪几个库名"信。
+验法是列 jar 里除 `shaded/` 与自己之外的包 —— 应该为空。
+
 ## forge-1.20.1：`legacy/` 大概率不用建（2026-09-22 复核，推翻当天早先的结论）
 
 用户问"给 forge 支持 1.20.1 要怎么做、好不好做"。我第一版答"代际差太大 → 必须建 `legacy/` 独立构建"，
@@ -243,8 +305,9 @@ GitHub 用 Node 24 跑并给出提示），不是我们的问题 —— 但说�
 **改法**：新增可复用工作流 `.github/workflows/platforms.yml`（`workflow_call`），输出
 `version` / `game_versions` / `matrix`；test 与 release 都 `uses:` 它。于是：
 
-* **平台清单只有一个地方**：加平台 = 往矩阵里加一行（`name` / `project` / `jar` / `loaders` / `properties`）。
-* **版本事实只有一个地方**：`gradle.properties`（`mod_version`、`publish_game_versions`、
+* **平台清单只有一个地方**：加平台 = 往矩阵里加一行
+  （`name` / `project` / `jar` / `loaders` / `game-versions` / `properties`）。
+* **版本事实只有一个地方**：`gradle.properties`（`mod_version`、`publish_game_versions_*`、
   `minecraft_version_range`）—— platforms.yml 只读不写，四个描述符里的范围本来也是 Gradle 从同一份文件
   expand 出来的。所以"改版本号/改 MC 窗口"根本不碰 workflow。
 * 矩阵里多一个 `properties` 字段：**只有 forge 那格**带 `-PwithForge=true`。因为 Gradle 会配置所有 include

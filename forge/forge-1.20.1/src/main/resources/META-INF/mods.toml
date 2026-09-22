@@ -1,0 +1,26 @@
+modLoader = "javafml"
+loaderVersion = "${forge_1201_loader_version_range}"
+license = "${mod_license}"
+issueTrackerURL = "${mod_url}/issues"
+
+[[mods]]
+modId = "${mod_id}"
+version = "${version}"
+displayName = "${mod_name}"
+authors = "${mod_authors}"
+description = '''${mod_description}'''
+
+# 1.20.1 的 Forge 是 47.x，而 26.x 那份写的是 64.x —— 同一个平台的两个窗口，各自声明自己那一代。
+[[dependencies.${mod_id}]]
+    modId = "forge"
+    mandatory = true
+    versionRange = "${forge_1201_loader_version_range}"
+    ordering = "NONE"
+    side = "BOTH"
+
+[[dependencies.${mod_id}]]
+    modId = "minecraft"
+    mandatory = true
+    versionRange = "${forge_1201_minecraft_version_range}"
+    ordering = "NONE"
+    side = "BOTH"

@@ -397,9 +397,9 @@ Fabric/Forge 的 1.20.1 留到真有需求时再付。
 **问题**：给 Forge 加一个 1.20.1 窗口要怎么做、好不好做。
 
 * **第一版结论**（当天早些时候）：代际差太大 → 必须建 `legacy/` 独立构建。
-* **修正后的结论**：**大概率不用建 legacy**。1.20.1 的 Forge 有一条官方支持的、跟主构建**同 artifact
-  同版本**的路（`net.neoforged.moddev.legacyforge`）。真正要付的钱只有两笔：**core 降 17**（已做）
-  和**适配器换事件模型**。
+* **修正后的结论**：**不用建 legacy，而且已经落地并在真机跑通了**。1.20.1 的 Forge 有一条官方支持的、
+  跟主构建**同 artifact 同版本**的路（`net.neoforged.moddev.legacyforge`）。真正要付的钱只有两笔：
+  **core 降 17**（已做）和**适配器换事件模型**（已做，比预估小得多 —— 见"六"）。
 
 第一版留着（见"一"），因为它记的代际事实仍然有用，判据也仍然是"下载目标版本的官方 MDK，看两行"。
 
@@ -494,20 +494,32 @@ Bukkit 也好）都要先付的钱**，不是 forge 专属成本。
 `./gradlew` 调用失败。**任何新的 forge 窗口都要走这个门控**（legacyforge 也要下工具链）。
 如果将来真建了 legacy 构建，它同样要照抄。
 
-#### 六、落地顺序（修正版）
+#### 六、落地顺序（**已全部完成**，2026-09-22）
 
 1. ~~core 去虚拟线程 → `core_java_release=17`~~ **已做**（见"三"）。
-2. 在**主构建**里加 `forge/forge-1.20.1`，用 `net.neoforged.moddev.legacyforge`（2.0.147，与 neoforge 同版本）。
-   **先只建这一个模块、跑一次 `./gradlew :forge:forge-1.20.1:build`** —— 它同时回答"二"里那三条未验项。
-   若三条都过，`legacy/` 这个目录根本不需要存在。
-3. 从 `forge/forge-26.1` 抄适配器，按"四"的表换事件模型；`mods.toml` 用 1.20.1 的
-   `loaderVersion="${loader_version_range}"`（值 `[47,)`）+ `versionRange="[47.1.3,)"` +
-   `minecraft_version_range="[1.20.1, 1.21)"`；接上 shadowJar 的 reobf。
-4. CI 加一格，mc-publish 声明 `game-versions: [1.20.1, 1.20.2]`。
+2. ~~在主构建里加 `forge/forge-1.20.1`，用 `net.neoforged.moddev.legacyforge`（2.0.147，与 neoforge 同版本）；
+   先只建这一个模块、跑一次 build，回答"二"里那三条未验项~~ **已做**：三条全过 ——
+   legacyforge 在 Gradle 9.7.1 上跑通了整条 NeoForm 管线（含反编译，首次 12m24s，之后 17s）；
+   与 ForgeGradle 7 同构建共存（两个插件都加载，`:forge:forge-1.20.1` 下 0 个 FG7 的 remap 任务）；
+   `reobfShadowJar` 真的把引用改成了 SRG 名（`getName()` → `m_7755_`，`javap` 实测）。
+   **`legacy/` 这个目录不需要存在。**
+3. ~~从 `forge/forge-26.1` 抄适配器，按"四"的表换事件模型~~ **已做**，而且比预估小：
+   1.20.1 的 `ServerChatEvent` **也有** `getUsername()` / `getRawText()`
+   （从 `forge-1.20.1-47.4.23-sources.jar` 读的），所以聊天那一行一个字没改；
+   真正改的只有事件注册的接收者、`@Mod` 构造器、权限写法、`getCurrentVersion()` 的方法名。一轮编译即过。
+4. ~~CI 加一格~~ **待做**：`release.yml` / `test.yml` 还要加 `-PwithForge=true` 的那一格，
+   mc-publish 声明 `game-versions: [1.20.1, 1.20.2]`。
 
-**万一第 2 步没过**（legacyforge 在 Gradle 9.7.1 上确实不行），再回到第一版方案：建 `legacy/`，
-自己的 wrapper（Gradle 8.8）+ FG `[6.0,6.2)` + Java 17 toolchain。那时共享 core 的第三个选择仍然可用：
-legacy 直接把 core 的源码目录加进自己的 sourceSet
+**真机验证**（这一代的验证方式与其它平台不同）：`-PjarOnly` 把**打包产物**放进 `run/mods/` 再起服 ——
+因为 Forge 1.20.1 的 dev run 看不见兄弟项目的 classes 目录（它的模块系统只认 jar，
+`build/moddev/serverLegacyClasspath.txt` 85 条全是 jar），而 `project(':core')` 解析成的是 classes 目录。
+症状是 mod 加载成功、模组列表里也有，但构造器一碰 core 就 `NoClassDefFoundError`。
+另外：**jar 里不能有没 relocate 的第三方包**，否则它的模块系统报
+`ResolutionException: ... export package ... to module minecraft` —— 见 PROGRESS 那两条坑。
+
+**万一第 2 步没过**（legacyforge 在 Gradle 9.7.1 上确实不行）—— 这条备份方案最终没用上，留档：
+建 `legacy/`，自己的 wrapper（Gradle 8.8）+ FG `[6.0,6.2)` + Java 17 toolchain。那时共享 core 的第三个选择
+仍然可用：legacy 直接把 core 的源码目录加进自己的 sourceSet
 （`sourceSets.main.java.srcDir("../../core/src/main/java")` + core 那 4 个 `compileOnly` 依赖 ——
 **core 的依赖全是 `compileOnly`，已核实**），代价是绕过 core 的构建脚本、core 加依赖要记得同步。
 

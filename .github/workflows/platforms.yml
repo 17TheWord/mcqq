@@ -5,10 +5,12 @@ name: Platforms
 # test 与 release 都调这个可复用工作流（`uses: ./.github/workflows/platforms.yml`），
 # 所以以后**加平台、改版本号、改 MC 窗口，只改这一个文件**：
 #
-#   * 加平台 → 往下面的矩阵里加一行（name / project / jar / loaders / properties）
+#   * 加平台 → 往下面的矩阵里加一行（name / project / jar / loaders / game-versions / properties）
 #   * 改版本号或 MC 窗口 → **不在这里改**：那些事实的唯一出处是 gradle.properties
-#     （`mod_version`、`publish_game_versions`、`minecraft_version_range`），这里只负责读出来传给调用方。
+#     （`mod_version`、`publish_game_versions_*`、`minecraft_version_range`），这里只负责读出来传给调用方。
 #     这样"版本事实"在 gradle.properties、"平台清单"在本文件，两边各只有一个地方要动。
+#     ⚠️ game-versions 是**每个窗口一份**（`publish_game_versions_26_1` / `_1_20_1`），不能共用 ——
+#     26.x 的 jar 装不到 1.20.1 上。
 #
 # 为什么 build 不在这里做：本项目一次 `./gradlew build` 就出全部产物，而 loom/moddev 的工具链是共享的，
 # 拆成矩阵会把 MC 工具链各下一遍。矩阵真正需要的地方是**发布**（每个产物一次 mc-publish）与**每平台一份产物**。
@@ -24,11 +26,8 @@ on:
       version:
         description: gradle.properties 里的 mod_version
         value: ${{ jobs.platforms.outputs.version }}
-      game_versions:
-        description: Modrinth / CurseForge 上的 game-versions（实测过的窗口）
-        value: ${{ jobs.platforms.outputs.game_versions }}
       matrix:
-        description: 平台矩阵，喂给 strategy.matrix
+        description: 平台矩阵，喂给 strategy.matrix（每行自带它那个窗口的 game-versions）
         value: ${{ jobs.platforms.outputs.matrix }}
 
 jobs:
@@ -36,7 +35,6 @@ jobs:
     runs-on: ubuntu-26.04
     outputs:
       version: ${{ steps.version.outputs.version }}
-      game_versions: ${{ steps.version.outputs.game_versions }}
       matrix: ${{ steps.matrix.outputs.matrix }}
 
     steps:
@@ -44,22 +42,24 @@ jobs:
         uses: actions/checkout@v7
 
       # 版本号与"发布时声称的游戏窗口"都从 gradle.properties 读 —— 那里是它们唯一的出处
-      # （描述符里的范围也由 Gradle 从同一份文件 expand 出来）。
+      # （描述符里的范围也由 Gradle 从同一份文件 expand 出来）。窗口各一份，所以这里读两次。
       - name: Read the version facts from gradle.properties
         id: version
         shell: bash
         run: |
           VERSION=$(grep -E "^mod_version=" gradle.properties | cut -d "=" -f 2)
-          GAME_VERSIONS=$(grep -E "^publish_game_versions=" gradle.properties | cut -d "=" -f 2)
+          V26_1=$(grep -E "^publish_game_versions_26_1=" gradle.properties | cut -d "=" -f 2)
+          V1_20_1=$(grep -E "^publish_game_versions_1_20_1=" gradle.properties | cut -d "=" -f 2)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "game_versions=$GAME_VERSIONS" >> $GITHUB_OUTPUT
-          echo "version=$VERSION  game_versions=$GAME_VERSIONS"
+          echo "v26_1=$V26_1"     >> $GITHUB_OUTPUT
+          echo "v1_20_1=$V1_20_1" >> $GITHUB_OUTPUT
+          echo "version=$VERSION  26.1=$V26_1  1.20.1=$V1_20_1"
 
       # 每行是：矩阵里的名字、Gradle 子项目、产出的 jar（仓库相对路径）、发布时的 loaders、
-      # 以及这个平台需要的额外 Gradle 参数。
+      # 这个窗口在 Modrinth/CurseForge 上声称的游戏版本、以及这个平台需要的额外 Gradle 参数。
       #
       # 那个 properties 字段是必要的：Forge 在 settings.gradle.kts 里是**按需 include** 的
-      # （它的工具链在配置阶段下载），而 Gradle 会配置所有 include 的项目 —— 所以只有 forge 那一格
+      # （它的工具链在配置阶段下载），而 Gradle 会配置所有 include 的项目 —— 所以只有 forge 那两格
       # 才该带 -PwithForge=true，否则每格都要白下一遍 Forge 工具链。
       #
       # loaders 只写真跑过的：Bukkit 那份是 Paper 与 Folia（Spigot 明确不支持，插件会自己停用并说明）。
@@ -70,15 +70,21 @@ jobs:
         # 上一步是另一个 shell 进程，变量不会传过来（第一次就踩了这个：矩阵里 %s 全成了空串）。
         env:
           VERSION: ${{ steps.version.outputs.version }}
+          V26_1: ${{ steps.version.outputs.v26_1 }}
+          V1_20_1: ${{ steps.version.outputs.v1_20_1 }}
         run: |
           # 用 printf 拼，不用 heredoc 也不用 jq：heredoc 的结束标记要求顶格，会被 YAML 块标量的缩进破坏；
           # jq 是又一个要赌 runner 上有没有的东西，而 printf 到处都有、本地也能照着跑一遍。
+          # ⚠️ 占位符是**按行出现顺序**消费的，加一格/改字段都要数一遍；加完立刻在本地跑一次看 JSON 能不能解析。
           matrix=$(printf '{"include":['\
-          '{"name":"fabric-26.1","project":":fabric:fabric-26.1","jar":"fabric/fabric-26.1/build/libs/mc-qq-fabric-26.1-%s.jar","loaders":"fabric","properties":""},'\
-          '{"name":"neoforge-26.1","project":":neoforge:neoforge-26.1","jar":"neoforge/neoforge-26.1/build/libs/mc-qq-neoforge-26.1-%s.jar","loaders":"neoforge","properties":""},'\
-          '{"name":"forge-26.1","project":":forge:forge-26.1","jar":"forge/forge-26.1/build/libs/mc-qq-forge-26.1-%s.jar","loaders":"forge","properties":"-PwithForge=true"},'\
-          '{"name":"spigot-26.1","project":":spigot:spigot-26.1","jar":"spigot/spigot-26.1/build/libs/mc-qq-spigot-26.1-%s.jar","loaders":"spigot","properties":""},'\
-          '{"name":"paper-26.1","project":":paper:paper-26.1","jar":"paper/paper-26.1/build/libs/mc-qq-paper-26.1-%s.jar","loaders":"paper folia","properties":""}'\
-          ']}' "$VERSION" "$VERSION" "$VERSION" "$VERSION" "$VERSION")
+          '{"name":"fabric-26.1","project":":fabric:fabric-26.1","jar":"fabric/fabric-26.1/build/libs/mc-qq-fabric-26.1-%s.jar","loaders":"fabric","game-versions":"%s","properties":""},'\
+          '{"name":"neoforge-26.1","project":":neoforge:neoforge-26.1","jar":"neoforge/neoforge-26.1/build/libs/mc-qq-neoforge-26.1-%s.jar","loaders":"neoforge","game-versions":"%s","properties":""},'\
+          '{"name":"forge-26.1","project":":forge:forge-26.1","jar":"forge/forge-26.1/build/libs/mc-qq-forge-26.1-%s.jar","loaders":"forge","game-versions":"%s","properties":"-PwithForge=true"},'\
+          '{"name":"spigot-26.1","project":":spigot:spigot-26.1","jar":"spigot/spigot-26.1/build/libs/mc-qq-spigot-26.1-%s.jar","loaders":"spigot","game-versions":"%s","properties":""},'\
+          '{"name":"paper-26.1","project":":paper:paper-26.1","jar":"paper/paper-26.1/build/libs/mc-qq-paper-26.1-%s.jar","loaders":"paper folia","game-versions":"%s","properties":""},'\
+          '{"name":"forge-1.20.1","project":":forge:forge-1.20.1","jar":"forge/forge-1.20.1/build/libs/mc-qq-forge-1.20.1-%s.jar","loaders":"forge","game-versions":"%s","properties":"-PwithForge=true"}'\
+          ']}' \
+          "$VERSION" "$V26_1" "$VERSION" "$V26_1" "$VERSION" "$V26_1" \
+          "$VERSION" "$V26_1" "$VERSION" "$V26_1" "$VERSION" "$V1_20_1")
           echo "$matrix"
           echo "matrix=$matrix" >> $GITHUB_OUTPUT

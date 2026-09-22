@@ -8,7 +8,7 @@
 
 | | 情况 | 例子 | 要做什么 |
 | --- | --- | --- | --- |
-| ① | 新版本，我们碰的 API 没变 | **26.1.2 → 26.2（已实测）** | 改版本事实 → 真机跑 → 把窗口写进 `publish_game_versions`。**代码零改动。** |
+| ① | 新版本，我们碰的 API 没变 | **26.1.2 → 26.2（已实测）** | 改版本事实 → 真机跑 → 把窗口写进那个窗口的 `publish_game_versions_*`。**代码零改动。** |
 | ② | API 变了，但旧写法还在（改名留别名、加了个重载） | 未遇到 | 改**那一个平台**的 adapter（一两处），core 不动，**仍是一个 jar 覆盖两版** |
 | ③ | API 变了且旧写法没了（二进制不兼容） | 未遇到（26.1 的 `Commands.hasPermission(int)` 就是这类） | 一个 jar 覆盖不了 → **加一个"版本窗口"子项目**，见第四节 |
 
@@ -51,8 +51,10 @@ Fabric 侧用 26.2 + Fabric API 0.161.0+26.2 **源码一行没改就编译通过
    * **断在某个 adapter** → 按第一节的 ②/③ 处理（②就地改；③见第四节）。
 4. **真机跑一遍**。四个测试服目录都在（`bukkit/run`、`fabric/run-prod`、`neoforge/run`、`forge/run`），
    各自配好了 `eula.txt` 与非默认端口 + RCON。跑 `/qq status` 看 `平台 xxx-<新版本>`，再跑 `/qq help`。
-5. 把窗口写进 `publish_game_versions`（Modrinth/CurseForge 声称的范围），**只写实测过的**。
-6. 若是 ③：在 `.github/workflows/platforms.yml` 的矩阵里加一行，其余 workflow 一个字不用改。
+5. 把窗口写进 `publish_game_versions_*`（Modrinth/CurseForge 声称的范围），**只写实测过的**。
+   ⚠️ 每个窗口一份（`_26_1` / `_1_20_1`），不能共用：26.x 的 jar 装不到 1.20.1 上。
+6. 若是 ③：在 `.github/workflows/platforms.yml` 的矩阵里加一行（含它那个窗口的 `game-versions`），
+   其余 workflow 一个字不用改。
 
 ## 四、情况 ③：需要"版本轴"时怎么做
 
