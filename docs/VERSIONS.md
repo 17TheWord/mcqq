@@ -51,7 +51,7 @@ Fabric 侧用 26.2 的依赖**源码一行没改就编译通过并加载**。26.
    * **断在 `core`** → 那是设计错误（core 不该认识 MC），当场修，并补一个测试防它再犯；
    * **断在某个 adapter** → 按第一节的 ②/③ 处理（②就地改；③见第四节）。
 4. **真机跑一遍**。测试服目录都配好了 `eula.txt` 与非默认端口 + RCON：
-   `paper/paper-26.1/run`（Paper 26.2）、`paper/paper-26.1/run-1.20.1`（Paper 1.20.1）、
+   `paper/paper-1.20.1/run`（Paper 26.2）、`paper/paper-1.20.1/run-1.20.1`（Paper 1.20.1）、
    `fabric/fabric-26.1/run`、`neoforge/neoforge-26.1/run`、`forge/forge-26.1/run`、`forge/forge-1.20.1/run`。
    跑 `/qq status` 看 `平台 xxx-<新版本>`，再跑 `/qq help`。
 5. 把窗口写进 `publish_game_versions_*`（Modrinth / CurseForge 声称的范围），**只写实测过的**。

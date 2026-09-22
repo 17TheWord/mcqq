@@ -29,12 +29,12 @@ fabric/fabric-26.1/            Fabric 适配（loom）：入口点、4 个事件
 neoforge/neoforge-26.1/        NeoForge（moddev）：事件用 NeoForge 的事件总线、命令挂 RegisterCommandsEvent
 forge/forge-26.1/              Forge（ForgeGradle）：26.x 的事件 API 与 NeoForge 完全不同（每个事件自带静态 BUS）
 forge/forge-1.20.1/            Forge 1.20.1（ModDevGradle 的 legacyforge）：**同一个构建里的另一个窗口**，Java 17，产物要 reobf 到 SRG
-spigot/spigot-26.1/            Spigot 变体：入口、老聊天事件（AsyncPlayerChatEvent）、`§` 字符串渲染
-paper/paper-26.1/              Paper 变体：入口、新聊天事件（AsyncChatEvent）、Adventure 渲染 + Folia 调度
+spigot/spigot-1.20.1/            Spigot 变体：入口、老聊天事件（AsyncPlayerChatEvent）、`§` 字符串渲染
+paper/paper-1.20.1/              Paper 变体：入口、新聊天事件（AsyncChatEvent）、Adventure 渲染 + Folia 调度
 ```
 
 窗口名用**窗口起点**（`fabric-26.1` 覆盖 `[26.1, 26.2]`，范围写在描述符里）。
-产物：`mc-qq-fabric-26.1-<版本>.jar` / `-neoforge-26.1-` / `-forge-26.1-` / `-forge-1.20.1-` / `-spigot-26.1-` / `-paper-26.1-`。
+产物：`mc-qq-fabric-26.1-<版本>.jar` / `-neoforge-26.1-` / `-forge-26.1-` / `-forge-1.20.1-` / `-spigot-1.20.1-` / `-paper-1.20.1-`。
 
 **`forge/forge-1.20.1` 为什么不用独立构建**：1.20.1 的 ForgeGradle 是第 6 代（要 Gradle 8），26.1 的是第 7 代
 （要 Gradle 9.3+），而同一个 plugin id 在一个构建里只能有一个版本。但 ModDevGradle 的
@@ -145,7 +145,7 @@ CI runner 的网络没问题，所以两个工作流都带了这个参数。
 #   fabric/fabric-26.1/build/libs/mc-qq-fabric-26.1-<版本>.jar      → Fabric 服务端 mods/
 #   neoforge/neoforge-26.1/build/libs/mc-qq-neoforge-26.1-<版本>.jar → NeoForge 服务端 mods/
 #   forge/forge-26.1/build/libs/mc-qq-forge-26.1-<版本>.jar          → Forge 服务端 mods/（见下：默认不在构建里）
-#   paper/paper-26.1/build/libs/mc-qq-paper-26.1-<版本>.jar          → Paper 系服务端 plugins/
+#   paper/paper-1.20.1/build/libs/mc-qq-paper-26.1-<版本>.jar          → Paper 系服务端 plugins/
 # 同目录的 -dev.jar 是不带任何依赖的瘦 jar，不要用它。
 # 另有 core/build/libs/mc-qq-core-<版本>.jar，那是内部产物，不需要单独安装。
 ```
@@ -315,7 +315,7 @@ Fabric 侧走 Brigadier（带补全），Paper 侧走 `plugin.yml` 的命令 + �
 
 ## 开发用的测试服（可以删）
 
-`paper/paper-26.1/run`、`fabric/fabric-26.1/run`、`neoforge/neoforge-26.1/run` 是验证用的服务端目录
+`paper/paper-1.20.1/run`、`fabric/fabric-26.1/run`、`neoforge/neoforge-26.1/run` 是验证用的服务端目录
 （合计约 800M），都在 `.gitignore` 里、不进仓库。它们是**验证环境**：留着，下次改完直接起服复验，不用重新下载
 （Mojang 那边现在限速）。要腾空间可以直接删整个目录 —— 代价是下次要重新拉服务端与依赖。
 最可以删的是 `bukkit/run-folia`（Folia 已经验过，它的缓存还是从 `bukkit/run` 复制过去的）。

@@ -7,7 +7,7 @@ plugins {
 
 base {
     // 名字里带平台与窗口：同一个平台会有多个窗口，只写版本号会撞名。
-    archivesName.set("${property("archives_base_name")}-spigot-26.1")
+    archivesName.set("${property("archives_base_name")}-spigot-1.20.1")
 }
 
 java {

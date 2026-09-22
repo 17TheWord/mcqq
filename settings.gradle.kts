@@ -21,8 +21,8 @@ include("core")
 // Bukkit 一族的共享部分（编译对 spigot-api）：paper / 以后的 spigot 都依赖它。
 include("bukkit-common")
 include("fabric:fabric-26.1")
-include("paper:paper-26.1")
-include("spigot:spigot-26.1")
+include("paper:paper-1.20.1")
+include("spigot:spigot-1.20.1")
 include("neoforge:neoforge-26.1")
 /**
  * Forge 是**按需**加进来的，默认不加。

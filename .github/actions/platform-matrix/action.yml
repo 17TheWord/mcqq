@@ -116,14 +116,21 @@ runs:
         add_row fabric-26.1    :fabric:fabric-26.1      "fabric/fabric-26.1/build/libs/mc-qq-fabric-26.1-$VERSION.jar"       "fabric"       "$V26_1"   ""
         add_row neoforge-26.1  :neoforge:neoforge-26.1  "neoforge/neoforge-26.1/build/libs/mc-qq-neoforge-26.1-$VERSION.jar" "neoforge"     "$V26_1"   ""
         add_row forge-26.1     :forge:forge-26.1        "forge/forge-26.1/build/libs/mc-qq-forge-26.1-$VERSION.jar"           "forge"        "$V26_1"   "-PwithForge=true"
-        add_row spigot-26.1    :spigot:spigot-26.1      "spigot/spigot-26.1/build/libs/mc-qq-spigot-26.1-$VERSION.jar"         "spigot"       "$V26_1"   ""
-        add_row paper-26.1     :paper:paper-26.1        "paper/paper-26.1/build/libs/mc-qq-paper-26.1-$VERSION.jar"           "paper folia"  "$V26_1"   ""
+        # ⚠️ spigot / paper 这两行与 forge 不同：它们**一个 jar 覆盖 1.20.1 → 26.x**
+        # （编译对最老的 paper-api / spigot-api 1.20.1，描述符里 api-version 是 1.20）。
+        # 所以 game-versions 是**并集** —— 只写 26.x 的话，1.20.1 的用户在 Modrinth 上搜不到。
+        # 行名按"窗口起点"取，也就是 1.20.1；`versions=1.20.1` 筛得到它们，`versions=26.1` 筛不到。
+        # 两份列表合成**一个**数组：game-versions 要的是 JSON 数组，
+        # 直接写成 "$V1_20_1,$V26_1" 会拼出两个数组（`[..],[..]`），mc-publish 不认。
+        SPIGOT_PAPER_VERSIONS="[$(echo "$V1_20_1" | tr -d '[]'), $(echo "$V26_1" | tr -d '[]')]"
+        add_row spigot-1.20.1  :spigot:spigot-1.20.1    "spigot/spigot-1.20.1/build/libs/mc-qq-spigot-1.20.1-$VERSION.jar"     "spigot"       "$SPIGOT_PAPER_VERSIONS" ""
+        add_row paper-1.20.1   :paper:paper-1.20.1      "paper/paper-1.20.1/build/libs/mc-qq-paper-1.20.1-$VERSION.jar"       "paper folia"  "$SPIGOT_PAPER_VERSIONS" ""
         add_row forge-1.20.1   :forge:forge-1.20.1      "forge/forge-1.20.1/build/libs/mc-qq-forge-1.20.1-$VERSION.jar"       "forge"        "$V1_20_1" "-PwithForge=true"
 
         # 筛出空集要当场报错：拼错一个平台名却"构建成功但什么都没出"，比直接失败难查得多。
         if [ ${#rows[@]} -eq 0 ]; then
           echo "::error::没有匹配的平台/窗口 —— platforms='${WANT_PLATFORMS:-<全部>}' versions='${WANT_VERSIONS:-<全部>}'。"
-          echo "::error::可用的窗口：fabric-26.1 neoforge-26.1 forge-26.1 forge-1.20.1 paper-26.1 spigot-26.1"
+          echo "::error::可用的窗口：fabric-26.1 neoforge-26.1 forge-26.1 forge-1.20.1 paper-1.20.1 spigot-1.20.1"
           exit 1
         fi
 

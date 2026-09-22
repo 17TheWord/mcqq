@@ -79,8 +79,8 @@ jobs:
             neoforge/neoforge-26.1/build/libs/mc-qq-*.jar
             forge/forge-26.1/build/libs/mc-qq-*.jar
             forge/forge-1.20.1/build/libs/mc-qq-*.jar
-            spigot/spigot-26.1/build/libs/mc-qq-*.jar
-            paper/paper-26.1/build/libs/mc-qq-*.jar
+            spigot/spigot-1.20.1/build/libs/mc-qq-*.jar
+            paper/paper-1.20.1/build/libs/mc-qq-*.jar
           if-no-files-found: error
 
       - name: Create the release and attach the jars
@@ -93,8 +93,8 @@ jobs:
             "neoforge/neoforge-26.1/build/libs/mc-qq-neoforge-26.1-${{ needs.platforms.outputs.version }}.jar" \
             "forge/forge-26.1/build/libs/mc-qq-forge-26.1-${{ needs.platforms.outputs.version }}.jar" \
             "forge/forge-1.20.1/build/libs/mc-qq-forge-1.20.1-${{ needs.platforms.outputs.version }}.jar" \
-            "spigot/spigot-26.1/build/libs/mc-qq-spigot-26.1-${{ needs.platforms.outputs.version }}.jar" \
-            "paper/paper-26.1/build/libs/mc-qq-paper-26.1-${{ needs.platforms.outputs.version }}.jar")
+            "spigot/spigot-1.20.1/build/libs/mc-qq-spigot-1.20.1-${{ needs.platforms.outputs.version }}.jar" \
+            "paper/paper-1.20.1/build/libs/mc-qq-paper-1.20.1-${{ needs.platforms.outputs.version }}.jar")
           if [ "${{ steps.tag.outputs.prerelease }}" = "true" ]; then
             gh release create "${GITHUB_REF_NAME}" --generate-notes --prerelease $JARS
           else

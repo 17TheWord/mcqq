@@ -12,8 +12,8 @@ mc-qq/                        Gradle 9.7.1 + JDK 25 daemon
   neoforge/neoforge-26.1/
   forge/forge-26.1/           ← 按需 include，见下
   forge/forge-1.20.1/         ← 同上
-  paper/paper-26.1/
-  spigot/spigot-26.1/
+  paper/paper-1.20.1/
+  spigot/spigot-1.20.1/
 ```
 
 项目路径是 `平台:窗口`（目录同名）。**窗口名用窗口起点**：`fabric-26.1` 覆盖 `[26.1, 26.2]`，
@@ -142,7 +142,7 @@ Gradle 8.8 + JDK 21 daemon + ForgeGradle 6 那一整套）。
 * **Fabric / NeoForge / Forge 的 jar 里不能有没 relocate 的第三方包。** 服务端自己就带 gson 与
   snakeyaml（版本还和我们依赖的不一样），mod 生态里 kotlin-stdlib 更是经典撞车项。统一 shadow + relocate。
   Forge 的模块系统撞车时报的是 `ResolutionException: ... export package ... to module minecraft`。
-* **`plugin.yml` 不能带 YAML 1.1 不认的东西**（比如没加引号的 `version: 0.1.0` 之外的怪写法），
+* **`plugin.yml` 不能带 YAML 1.1 不认的东西**（比如没加引号的 `version: 0.0.1` 之外的怪写法），
   否则 Bukkit 直接拒绝加载；`api-version` 必须是 major.minor（见第三节）。
 * **Folia**：`Bukkit.getScheduler()` 在 Folia 上不可用，广播要走 global region scheduler，
   并且 `plugin.yml` 里要写 `folia-supported: true`。adapter 的 `onMainThread` 要分档
@@ -154,7 +154,7 @@ Gradle 8.8 + JDK 21 daemon + ForgeGradle 6 那一整套）。
 
 * **真机验证用 RCON**，不要靠 stdin 管道：`refs/rcon.py <port> <password> "<cmd>"`。
   只看 `Done (x.xs)!` 会漏掉"命令能跑但一调 API 就炸"这类问题。
-* **测试服目录**（都在 `.gitignore` 里）：`paper/paper-26.1/run`（Paper 26.2）、`run-1.20.1`
+* **测试服目录**（都在 `.gitignore` 里）：`paper/paper-1.20.1/run`（Paper 26.2）、`run-1.20.1`
   （Paper 1.20.1，端口 25631 / RCON 25685）、`forge/forge-1.20.1/run`。
   跑测试服**用绝对路径**：`cd` 之后的相对路径很容易落到模块目录，服务端会找不到 jar
   或把 world 生成在错的地方。

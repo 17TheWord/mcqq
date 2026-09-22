@@ -15,7 +15,7 @@ import java.nio.file.Path;
  */
 public interface MinecraftPlatform {
 
-    /** What {@code /qq status} prints first, e.g. {@code fabric-26.1.2} or {@code paper-26.1.2}. */
+    /** What {@code /qq status} prints first, e.g. {@code fabric-26.1} or {@code paper-1.20.1}. */
     String label();
 
     /** Where {@code mc-qq/config.yml} lives: {@code config/} on Fabric, the plugin's data folder on Bukkit. */
