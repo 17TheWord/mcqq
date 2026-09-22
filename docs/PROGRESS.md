@@ -31,7 +31,62 @@
 
 **没有落地任何代码**。`refs/` 里的 1.20.1 MDK 与鹊桥源码是本次的唯一证据来源。
 
-## forge-1.20.1 窗口：已落地并在真机跑通（2026-09-22，最新）
+## Bukkit 一族改成"编译对最老目标"：一个 jar 覆盖 1.20.1 → 26.x（2026-09-22，最新）
+
+用户指出插件端的标准做法是**编译对最老的目标、一个 jar 往上覆盖**。核实下来成立，而且原来的做法是**反的** ——
+`bukkit-common` / paper / spigot 都编译对 26.1.2，所以往低版本装不了（编译时用的是 26.x 才有的符号）。
+
+### 第一步（最便宜）：编译
+
+三个模块分别编译对 1.20.1 的 API，**全过、零错误**：
+
+| 模块 | 换成 | 结果 |
+| --- | --- | --- |
+| `bukkit-common` | `spigot-api:1.20.1-R0.1-SNAPSHOT` | ✓ |
+| `paper/paper-26.1` | `paper-api:1.20.1-R0.1-SNAPSHOT` | ✓ |
+| `spigot/spigot-26.1` | `spigot-api:1.20.1-R0.1-SNAPSHOT` | ✓ |
+
+连 Folia 的 `server.getGlobalRegionScheduler()` / `player.getScheduler()` 和 Adventure 的 `AsyncChatEvent`
+都在 paper-api 1.20.1 里 —— 用到的全是十来年没动过的东西。**代价只有"不能用 1.20.1 之后新增的 API"**，
+对本项目是零成本。
+
+### 改了什么
+
+* `gradle.properties`：两个 API 坐标换成 1.20.1。
+* 两个 bukkit 模块的 `options.release` 25 → **17**（1.20.1 的服务端跑 Java 17）。
+* 两个 `plugin.yml` 的 `api-version`（见下）。
+
+### ⚠️ `api-version` 是 **major.minor**，不是完整的 MC 版本
+
+第一次写 `api-version: '1.20.1'`，Paper 1.20.1 直接拒绝加载：
+
+```
+org.bukkit.plugin.InvalidPluginException: Unsupported API version 1.20.1
+```
+
+改成 **`'1.20'`** 就好了。（26.x 那份写 `26.1` 本来就对，因为它正好是 major.minor —— 之前的正确是巧合。）
+
+### 真机验证：**同一个 jar**，两端都跑
+
+同一个文件（md5 `5282481127eb14870a3f025e5a61cc6b` 一致）分别丢进两个测试服：
+
+| 服务端 | 结果 |
+| --- | --- |
+| **Paper 1.20.1**（build 196，Java 17） | `平台 paper-1.20.1，主线程调度走 经典调度器`；RCON 敲 `/qq status` / `help` 全通 |
+| **Paper 26.2**（build 126，Java 25） | `平台 paper-26.2，主线程调度走 经典调度器`（加载成功） |
+| **spigot 那份** 在 Paper 1.20.1 上 | 走到它该走的拒绝路径：`这个 jar 是给 Spigot / CraftBukkit 的…插件已停用` |
+
+26.2 那边**没**重验命令路径：那条路径与 `api-version` 无关，且早先会话已验过；而"`api-version: 1.20` 会不会被
+26.2 拒绝"这个**真正的风险**，已经被"它加载成功了"排除掉（否则会报同样的 `InvalidPluginException`）。
+
+### 一个还悬着的决定：窗口名
+
+`paper/paper-26.1` 与 `spigot/spigot-26.1` 现在覆盖的是 **1.20.1 → 26.x**，但目录名与产物名还写着 `26.1`
+（按项目"窗口名 = 窗口起点"的约定应该叫 `-1.20.1`）。改名会动到**产物名**与 CI 矩阵，而且 Modrinth 的
+`game-versions` 要**逐个列出** —— 一个覆盖三十来个版本的 jar 就得列三十来个，而文档的规矩是"只写实测过的"。
+这两条都是对外的，留给用户定。**代码这边已经一致了，只剩名字。**
+
+## forge-1.20.1 窗口：已落地并在真机跑通（2026-09-22）
 
 从"复核可行性"变成了"做完了"。`forge/forge-1.20.1/` 是**主构建**里的一个子项目（用 ModDevGradle 的
 `net.neoforged.moddev.legacyforge`，与 neoforge 用的 `net.neoforged.moddev` 同 artifact 同版本）——

@@ -55,7 +55,9 @@ tasks.processResources {
 
 tasks.withType<JavaCompile>().configureEach {
     options.encoding = "UTF-8"
-    options.release.set(25)
+    // 17，不是 25：这个 jar 要一路覆盖到 1.20.1（那里的服务端跑 Java 17）。见 gradle.properties 里
+    // paper_api_version 的说明 —— 编译对最老的目标是插件端的标准做法。
+    options.release.set(17)
     // Surface the platform's deprecations at compile time instead of finding out when an API disappears.
     options.compilerArgs.add("-Xlint:deprecation")
 }

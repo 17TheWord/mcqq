@@ -8,3 +8,4 @@ logs/
 # 否则一次 `git add -A` 就会把几百 MB 的服务端推进仓库。
 run-prod/
 run-folia/
+run-1.20.1/

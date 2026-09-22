@@ -1,7 +1,10 @@
 name: ${mod_id}
 version: '${version}'
 main: com.example.mcqq.paper.McQqPlugin
-api-version: '26.1'
+# 声明的是**最低**支持的服务端。Bukkit 只在插件声明得比服务端新时拒绝加载，所以这个值一路放行到 26.x。
+# ⚠️ 语法是 **major.minor**，不是完整的 MC 版本 —— 写 '1.20.1' 会被 Paper 1.20.1 以
+# `InvalidPluginException: Unsupported API version 1.20.1` 拒绝（实测）。所以 1.20.1 要写 '1.20'。
+api-version: '1.20'
 # Folia has no single main thread; the plugin schedules per player and per region instead. Verified by loading
 # this jar on Folia 26.1.2 (see docs/PROGRESS.md).
 folia-supported: true

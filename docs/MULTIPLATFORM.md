@@ -338,8 +338,18 @@ SDK 是 `--release 17`，所以 **core 停在 release 17 就同时服务 1.20.1 
 | 字节码目标 | Java 17（major 61） | Java 25（major 69） |
 
 → 只要不碰 NMS、不用只在 1.20.5+ 才出现的 API，这一个 jar 就能从 1.20.1 跑到 26.3。
-**待补的验证**：`AsyncChatEvent` 的构造与方法签名在两端是否一致（类在 ≠ 签名一致），
-两端各跑一次编译+加载即可。
+
+**✅ 已落地并真机验证（2026-09-22）**：三个模块（`bukkit-common` / paper / spigot）改成编译对 1.20.1 的 API、
+`options.release = 17`、`api-version: '1.20'`，全部编译通过；**同一个 jar**（md5 一致）在
+**Paper 1.20.1** 与 **Paper 26.2** 上都加载成功，1.20.1 上 RCON 敲 `/qq status` / `help` 全通。
+过程中两条只有真机才暴露的：
+
+* `api-version` 的语法是 **major.minor**，不是完整的 MC 版本 —— 写 `'1.20.1'` 会被 Paper 1.20.1
+  以 `InvalidPluginException: Unsupported API version 1.20.1` 拒绝。所以 1.20.1 要写 `'1.20'`。
+* 原做法（编译对 26.1.2）的失败方向是**反的**：那不是"往高版本跑不了"，而是**往低版本装不了**。
+  编译对最新只损失兼容范围，不会损失功能 —— 所以没有理由那么做。
+
+完整记录（含改了什么、怎么验的）见 `docs/PROGRESS.md`。
 
 ### 8.3 Fabric：能，但要多一个"老工具链"子项目
 
@@ -391,6 +401,8 @@ legacy/                      独立构建（自己的 wrapper，Gradle 8.8 + For
 `legacy/` 大概率不用建。而这个成本本来就可以按平台分批付的 ——
 **先只加 bukkit 的 1.20.1 覆盖**（一个 jar，零额外工具链），就能把 1.20.1 这个最有人用的低版本吃掉大半，
 Fabric/Forge 的 1.20.1 留到真有需求时再付。
+→ **这一步已经做了（2026-09-22）**，而且做成了"编译对 1.20.1、一个 jar 覆盖 1.20.1 → 26.x"，
+见 §8.2 的验证记录。
 
 ### 8.6 forge-1.20.1 复核（2026-09-22 实测；结论当天被自己推翻过一次）
 
@@ -589,7 +601,7 @@ Bukkit 也好）都要先付的钱**，不是 forge 专属成本。
 mc-qq/                        Gradle 9.7.1 + JDK 25 daemon
   core/                       release 17（1.20.1 / 1.21.x / 26.x 通吃）← 2026-09-22 起真的是 17
   fabric/  neoforge/  forge/  26.x 窗口，描述符写范围
-  bukkit/                     编译对 1.20.1 → 一个 jar 覆盖 1.20.1 → 26.3
+  bukkit/                     编译对 1.20.1 → 一个 jar 覆盖 1.20.1 → 26.x ← 2026-09-22 已落地并真机验证
 legacy/                       Gradle 8.8 + JDK 21 daemon（独立构建，自己的 wrapper）
   fabric-1.20.1/  forge-1.20.1/  forge-1.21/  neoforge-1.21.1/
   每个窗口一个子项目 + support_version.txt

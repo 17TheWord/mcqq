@@ -47,6 +47,13 @@ paper/paper-26.1/              Paper 变体：入口、新聊天事件（AsyncCh
 **Bukkit 一族装哪个**：Paper 系（含 Purpur，以及 **Folia**）装 `paper` 那份；Spigot / CraftBukkit 装 `spigot` 那份。
 **装错了会明确告诉你**：spigot 那份在 Paper 上会打印一句原因并停用自己（反过来也一样），
 不会静默地少转发或者重复转发。
+
+**Bukkit 那两个 jar 覆盖的是 1.20.1 → 26.x**（比别的平台宽得多）：插件端编译对**最老**的目标就能一路往上跑，
+所以这两份编译对 paper-api / spigot-api **1.20.1**、`options.release = 17`、`api-version: '1.20'`。
+实测同一个 jar（md5 一致）在 Paper 1.20.1 与 Paper 26.2 上都加载成功、命令都能跑。
+⚠️ `api-version` 的语法是 **major.minor**（`1.20`），不是完整的 MC 版本 —— 写 `1.20.1` 会被直接拒绝加载。
+（反过来说：编译对最新的 26.1.2 只会**缩小**覆盖范围，没有任何好处。）
+
 加一个新窗口 = 复制一个窗口目录 + 在 `platforms.yml` 的矩阵里加一行。
 **`bukkit-common/` 是唯一一个"跨平台"的模块**：它编译对 spigot-api（Bukkit 一族的最低公分母），
 Paper 变体与 Spigot 变体都依赖它，各自只补自己那点差异（Paper 用 Adventure 渲染 + Folia 调度，
