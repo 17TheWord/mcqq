@@ -1,6 +1,9 @@
 package com.example.mcqq.core;
 
+import io.github.skiesworld.qqbot.error.ApiException;
 import io.github.skiesworld.qqbot.event.QQMessageEvent;
+import io.github.skiesworld.qqbot.message.MessageBuilder;
+import io.github.skiesworld.qqbot.message.ReplyTarget;
 import java.util.List;
 import java.util.Optional;
 
@@ -74,12 +77,60 @@ final class McCommands {
         return text.length() <= MAX_LENGTH ? text : text.substring(0, MAX_LENGTH) + "\n…（已截断）";
     }
 
-    /** 回不出去（网络、审核、限流）不能让桥接的消息循环跟着倒。 */
+    /**
+     * 回一条消息。先试被动回复；平台说"这条路走不通"就改用主动消息。
+     *
+     * <p>群里有一条硬规则：**被动回复只能回复 @ 过机器人的消息** —— {@code msg_id} 取自
+     * {@code GROUP_AT_MESSAGE_CREATE} 事件。所以"@ 机器人执行命令"能拿到被动回复，
+     * 而全量模式下收到的普通消息只能用主动消息回（代价是占主动消息额度，而且用户可以在客户端
+     * 关掉主动消息 —— 关了就真的发不出去了）。
+     *
+     * <p>回不出去（网络、审核、限流）不能让桥接的消息循环跟着倒。
+     */
     private static void reply(QQMessageEvent message, String text) {
         try {
             message.reply(text);
+            return;
+        } catch (ApiException e) {
+            if (!replyPathIsClosed(e.errCode())) {
+                Log.warn("把命令的回显发回 QQ 失败 err_code=" + e.errCode() + "：" + e.getMessage());
+                return;
+            }
+            Log.info("被动回复走不通（err_code=" + e.errCode() + "），改用主动消息发回显");
         } catch (RuntimeException e) {
             Log.warn("把命令的回显发回 QQ 失败", e);
+            return;
+        }
+        proactive(message, text);
+    }
+
+    /**
+     * 这几种都说明"被动回复这条路走不通"，不是内容的问题：
+     * {@code 40034024} msg_id 无效或越权（那条消息没 @ 机器人）、{@code 40034005} / {@code 304103}
+     * 已过期、{@code 40034128} 时间或次数超限。
+     */
+    private static boolean replyPathIsClosed(int errCode) {
+        return errCode == 40034024 || errCode == 40034005 || errCode == 304103 || errCode == 40034128;
+    }
+
+    /** 主动消息：不带 msg_id。 */
+    private static void proactive(QQMessageEvent message, String text) {
+        try {
+            ReplyTarget scene = message.scene();
+            String conversationId = QqEvents.conversationId(message);
+            if (scene == ReplyTarget.GROUP) {
+                message.outbound().api().group()
+                        .sendGroupMessage(conversationId, MessageBuilder.of(text).toGroup());
+            } else if (scene == ReplyTarget.C2C) {
+                message.outbound().api().c2c()
+                        .sendC2CMessage(conversationId, MessageBuilder.of(text).toC2C());
+            } else {
+                Log.warn("被动回复走不通，而这个会话（" + scene + "）还没有主动消息的兜底");
+                return;
+            }
+            Log.debug("回显是用主动消息发出去的");
+        } catch (RuntimeException e) {
+            Log.warn("改用主动消息也没发出去", e);
         }
     }
 }
