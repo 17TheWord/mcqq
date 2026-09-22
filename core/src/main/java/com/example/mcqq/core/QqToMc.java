@@ -69,6 +69,11 @@ public final class QqToMc {
             return;
         }
         BridgeConfig.Target target = bound.get();
+        // 身份字段是权限判断的输入，而"事件里到底带了什么"只有真机能告诉我们 —— 所以打全。
+        CommandAccess.Sender sender = QqEvents.of(message);
+        Log.debug("收到 " + target.label() + " 的消息：openid=" + sender.openid()
+                + " member_role='" + sender.memberRole() + "' roles=" + sender.roleIds()
+                + " 内容：" + message.content());
         if (!target.receivesFromQq()) {
             Log.debug("群 " + target.label() + " 配成了只出不进，忽略这条消息");
             return;

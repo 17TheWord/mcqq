@@ -32,8 +32,10 @@ public final class JulSink implements Log.Sink {
 
     @Override
     public void debug(String message) {
-        // FINE, not INFO: a server console should not be flooded by default.
-        log.fine(message);
+        // INFO 而不是 DEBUG/FINE：这个方法的门是配置里的 debug 开关（Log.debug 已经判过），
+        // 而服务端的 logger 级别默认是 INFO —— 再按 DEBUG 输出的话，那些行在真机上一句都看不到，
+        // 开关就等于没作用。宁可让打开开关的人看到几条带 [debug] 的 INFO 行。
+        log.info("[debug] " + message);
     }
 
     @Override
