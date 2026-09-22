@@ -12,6 +12,7 @@ QQ 侧走 [qqbot-java-sdk](https://github.com/skiesworld/qqbot-java-sdk) 0.0.4 �
 | --- | --- |
 | [docs/VERSIONS.md](docs/VERSIONS.md) | **加一个新 MC 版本要做什么**：三种情况、具体步骤、什么时候才需要加"版本窗口"子项目。 |
 | [docs/MULTIPLATFORM.md](docs/MULTIPLATFORM.md) | 每个平台的构建事实、结构，以及加平台/加版本时要知道的坑。 |
+| [docs/COMMANDS.md](docs/COMMANDS.md) | 群 / 子频道 / 私聊三个面的字段与限额、权限模型、命令执行为什么走 RCON。 |
 | [docs/TEMPLATES.md](docs/TEMPLATES.md) | 消息模板、占位符与配置层级；含第三方占位符库怎么接。 |
 | [THIRD-PARTY.md](THIRD-PARTY.md) | 打包进去的第三方组件与许可证。 |
 | [LICENSE](LICENSE) | MIT。 |
