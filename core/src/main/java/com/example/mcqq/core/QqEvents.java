@@ -31,6 +31,15 @@ final class QqEvents {
     private QqEvents() {
     }
 
+    /** 子频道属于哪个频道。群与私聊没有这个字段，返回空串。 */
+    static String guildId(QQEvent event) {
+        com.google.gson.JsonObject raw = event.rawObject();
+        if (raw == null || !raw.has("guild_id") || !raw.get("guild_id").isJsonPrimitive()) {
+            return "";
+        }
+        return raw.get("guild_id").getAsString().trim();
+    }
+
     /** 这条消息属于哪个会话：群 openid / 子频道 id / 用户 openid。 */
     static String conversationId(QQEvent event) {
         var scene = event.scene();

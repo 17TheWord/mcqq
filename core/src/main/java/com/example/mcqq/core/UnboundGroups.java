@@ -27,12 +27,19 @@ public final class UnboundGroups {
 
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm:ss");
 
-    /** One group, and the bot that heard from it. */
-    public record Seen(String botId, String groupOpenid, LocalTime at) {
+    /**
+     * 一个在跟机器人说话、但配置里还没有的会话 —— 群或子频道，以及是哪个 bot 听到的。
+     *
+     * <p>子频道要多带一个 {@code guildId}：绑定的时候要把它一起写进配置（{@code guild-id} +
+     * {@code channel-id} 是它寻址的两个字段）。
+     */
+    public record Seen(String botId, BridgeConfig.Kind kind, String conversationId, String guildId,
+            LocalTime at) {
 
         /** As {@code /qq status} prints it. */
         public String label() {
-            return "群 " + groupOpenid + "（bot " + botId + "，" + at.format(TIME) + "）";
+            String what = kind == BridgeConfig.Kind.CHANNEL ? "子频道 " : "群 ";
+            return what + conversationId + "（bot " + botId + "，" + at.format(TIME) + "）";
         }
     }
 
@@ -52,12 +59,13 @@ public final class UnboundGroups {
      * <p>The caller logs the first sighting only: a group that keeps talking would otherwise own the log, and
      * one line is enough to tell the operator the id they were missing.
      */
-    public boolean remember(String botId, String groupOpenid) {
+    public boolean remember(String botId, BridgeConfig.Kind kind, String conversationId, String guildId) {
         synchronized (byOpenid) {
-            // Remove before put so a group that talks again moves to the end — LinkedHashMap keeps the original
+            // Remove before put so one that talks again moves to the end — LinkedHashMap keeps the original
             // position on a plain put, and "newest" is what a bare /qq bind uses.
-            boolean first = byOpenid.remove(groupOpenid) == null;
-            byOpenid.put(groupOpenid, new Seen(botId, groupOpenid, LocalTime.now()));
+            boolean first = byOpenid.remove(conversationId) == null;
+            byOpenid.put(conversationId,
+                    new Seen(botId, kind, conversationId, guildId, LocalTime.now()));
             return first;
         }
     }
@@ -92,10 +100,10 @@ public final class UnboundGroups {
         List<Seen> matches = new ArrayList<>();
         synchronized (byOpenid) {
             for (Seen seen : byOpenid.values()) {
-                if (seen.groupOpenid().equalsIgnoreCase(typed)) {
+                if (seen.conversationId().equalsIgnoreCase(typed)) {
                     return seen;
                 }
-                if (seen.groupOpenid().toLowerCase().startsWith(typed.toLowerCase())) {
+                if (seen.conversationId().toLowerCase().startsWith(typed.toLowerCase())) {
                     matches.add(seen);
                 }
             }

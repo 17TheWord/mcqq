@@ -100,7 +100,7 @@ class BindFlowTest {
         listener.onGroupMessage(message("m2", "NEWGROUP"));
         listener.onGroupMessage(message("m3", "BOUND"));
 
-        assertEquals("NEWGROUP", unbound.newest().groupOpenid(), "没绑定的群要被记下来");
+        assertEquals("NEWGROUP", unbound.newest().conversationId(), "没绑定的群要被记下来");
         assertEquals(1, unbound.all().size(), "已经绑过的那个不该进这个列表");
         assertEquals(1, log.stream().filter(line -> line.startsWith("WARN") && line.contains("NEWGROUP")).count(),
                 "同一个群只该刷一行日志，不是每条消息一行：" + log);
@@ -120,9 +120,9 @@ class BindFlowTest {
         Bridge bridge = new Bridge(headless());
         bridge.start();
         try {
-            bridge.unboundGroups().remember("main", "NEWGROUP");
+            bridge.unboundGroups().remember("main", BridgeConfig.Kind.GROUP, "NEWGROUP", "");
 
-            List<String> lines = bridge.bindGroup(bridge.unboundGroups().newest());
+            List<String> lines = bridge.bind(bridge.unboundGroups().newest());
 
             assertTrue(lines.get(0).startsWith("已绑定"), lines.toString());
             BridgeConfig written = BridgeConfig.parse(BridgeConfig.configPath(dir));
@@ -133,6 +133,34 @@ class BindFlowTest {
             assertTrue(lines.stream().anyMatch(line -> line.contains(label)),
                     "重载后的状态里要能看到它：" + lines);
             assertNull(bridge.unboundGroups().newest(), "绑过的群不该还留在待绑列表里");
+        } finally {
+            bridge.stop();
+        }
+    }
+
+    @Test
+    void bindingAChannelWritesBothKeys() throws Exception {
+        // 子频道寻址要两个字段，所以 guild-id 也得一起写进去 —— 不然配置里认不出它在哪个频道。
+        config("""
+                bots:
+                  - id: main
+                    app-id: "1"
+                    secret-env: MCQQ_TEST_NEVER_SET
+                    groups:
+                      - group-openid: "G1"
+                """);
+        Bridge bridge = new Bridge(headless());
+        bridge.start();
+        try {
+            bridge.unboundGroups().remember("main", BridgeConfig.Kind.CHANNEL, "CH1", "GUILD-1");
+
+            List<String> lines = bridge.bind(bridge.unboundGroups().newest());
+
+            assertTrue(lines.get(0).startsWith("已绑定"), lines.toString());
+            BridgeConfig.Channel channel = BridgeConfig.parse(BridgeConfig.configPath(dir))
+                    .bots().get(0).channels().get(0);
+            assertEquals("GUILD-1", channel.guildId());
+            assertEquals("CH1", channel.channelId());
         } finally {
             bridge.stop();
         }

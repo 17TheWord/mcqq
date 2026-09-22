@@ -57,6 +57,13 @@ class QqEventsTest {
     }
 
     @Test
+    void theGuildIdComesFromTheEventAndIsEmptyElsewhere() {
+        assertEquals("GUILD", QqEvents.guildId(channelMessage("U1", "[\"1\"]")),
+                "绑子频道时要把 guild-id 一起写进配置，所以它得读得出来");
+        assertEquals("", QqEvents.guildId(groupMessage("A", "member")), "群没有 guild_id");
+    }
+
+    @Test
     void aChannelMessageWithNoRolesIsEmptyNotBroken() {
         assertEquals(Set.of(), QqEvents.of(channelMessage("U1", "[]")).roleIds());
         assertEquals(Set.of(), QqEvents.of(channelMessage("U1", "null")).roleIds());

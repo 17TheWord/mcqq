@@ -111,20 +111,22 @@ public final class Bridge {
      * Binds a group that has already talked to a bot: writes it into the config and reloads, so the operator
      * never has to open the file. Returns what to print.
      *
-     * <p>Only groups in {@link UnboundGroups} can be bound this way, which is a safety property and not just a
-     * convenience: it means {@code /qq bind} can only ever attach a group that has actually sent this bot
-     * something, so a typo cannot wire the server's chat to a stranger's group.
+     * <p>Only targets in {@link UnboundGroups} can be bound this way, which is a safety property and not just
+     * a convenience: it means {@code /qq bind} can only ever attach something that has actually sent this bot
+     * a message, so a typo cannot wire the server's chat to a stranger's group or channel.
      */
-    public synchronized List<String> bindGroup(UnboundGroups.Seen target) {
+    public synchronized List<String> bind(UnboundGroups.Seen target) {
         Path path = BridgeConfig.configPath(platform.configDir());
         String label;
         try {
-            label = BridgeConfig.bindGroup(path, target.botId(), target.groupOpenid());
+            label = target.kind() == BridgeConfig.Kind.CHANNEL
+                    ? BridgeConfig.bindChannel(path, target.botId(), target.guildId(), target.conversationId())
+                    : BridgeConfig.bindGroup(path, target.botId(), target.conversationId());
         } catch (IOException e) {
             return List.of("绑定失败：" + e.getMessage());
         }
-        unboundGroups.forget(target.groupOpenid());
-        Log.info("把群 " + target.groupOpenid() + " 绑到 bot " + target.botId() + "，已写进 config.yml");
+        unboundGroups.forget(target.conversationId());
+        Log.info("把 " + target.conversationId() + " 绑到 bot " + target.botId() + "，已写进 config.yml");
         List<String> lines = new ArrayList<>();
         lines.add("已绑定 " + label + "（写进 config.yml，旧文件备份在 config.yml.bak；"
                 + "要改显示名就编辑那个 label）");

@@ -574,8 +574,28 @@ public final class BridgeConfig {
      * @throws IOException when the file cannot be read or written, or the bot or group is not there to change;
      *     the message is written for the operator, because that is where it ends up
      */
-    @SuppressWarnings("unchecked")
     public static String bindGroup(Path path, String botId, String groupOpenid) throws IOException {
+        return bindInto(path, botId, "groups", "group-openid", groupOpenid, "群 ", null);
+    }
+
+    /** 把子频道绑上 —— 寻址要两个字段，所以 guild-id 也一起写进去。 */
+    public static String bindChannel(Path path, String botId, String guildId, String channelId)
+            throws IOException {
+        return bindInto(path, botId, "channels", "channel-id", channelId, "子频道 ", guildId);
+    }
+
+    /**
+     * 把一个目标写进某个 bot 的某个列表（{@code groups:} 或 {@code channels:}）。
+     *
+     * <p>两者的列表名与键不同、子频道还多一个 {@code guild-id}，其余（找 bot、查重、备份、写回）
+     * 完全一样 —— 所以只有这一份。
+     *
+     * @param guildId 只有子频道用；群传 null
+     * @return 这个目标拿到的 label
+     */
+    @SuppressWarnings("unchecked")
+    private static String bindInto(Path path, String botId, String listKey, String keyField, String keyValue,
+            String labelPrefix, String guildId) throws IOException {
         Map<String, Object> root = readYaml(path);
         if (root == null) {
             throw new IOException("读不出 " + path.getFileName() + "（它不是一个 YAML 对象？）");
@@ -591,26 +611,28 @@ public final class BridgeConfig {
             if (!botId.equals(text(bot.get("id")))) {
                 continue;
             }
-            Object configured = bot.get("groups");
-            List<Object> groups = configured instanceof List ? (List<Object>) configured : new ArrayList<>();
-            for (Object group : groups) {
-                if (group instanceof Map
-                        && groupOpenid.equals(text(((Map<String, Object>) group).get("group-openid")))) {
-                    throw new IOException("这个群已经绑在 bot " + botId + " 上了");
+            Object configured = bot.get(listKey);
+            List<Object> list = configured instanceof List ? (List<Object>) configured : new ArrayList<>();
+            for (Object item : list) {
+                if (item instanceof Map && keyValue.equals(text(((Map<String, Object>) item).get(keyField)))) {
+                    throw new IOException("这个目标已经绑在 bot " + botId + " 上了");
                 }
             }
-            String label = "群 " + lastSix(groupOpenid);
+            String label = labelPrefix + lastSix(keyValue);
             Map<String, Object> added = new LinkedHashMap<>();
-            added.put("group-openid", groupOpenid);
+            if (guildId != null && !guildId.isBlank()) {
+                added.put("guild-id", guildId);
+            }
+            added.put(keyField, keyValue);
             // Deliberately no send-to-qq: absent means the default set, which is what a new binding wants.
             added.put("label", label);
-            groups.add(added);
-            bot.put("groups", groups);
+            list.add(added);
+            bot.put(listKey, list);
 
             Path backup = path.resolveSibling(path.getFileName() + BACKUP_SUFFIX);
             Files.copy(path, backup, StandardCopyOption.REPLACE_EXISTING);
             writeYaml(path, root,
-                    "# 这个文件被 " + Constants.MOD_ID + " 改过：/qq bind 把一个群加了进来。\n");
+                    "# 这个文件被 " + Constants.MOD_ID + " 改过：/qq bind 把一个目标加了进来。\n");
             return label;
         }
         throw new IOException("配置里没有 id 是 " + botId + " 的 bot");

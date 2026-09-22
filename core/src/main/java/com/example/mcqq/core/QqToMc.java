@@ -5,6 +5,7 @@ import io.github.skiesworld.qqbot.event.QQEvent;
 import io.github.skiesworld.qqbot.event.QQMessageEvent;
 import io.github.skiesworld.qqbot.event.QQNoticeEvent;
 import io.github.skiesworld.qqbot.handler.On;
+import io.github.skiesworld.qqbot.message.ReplyTarget;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -64,7 +65,7 @@ public final class QqToMc {
         }
         Optional<BridgeConfig.Target> bound = target(message);
         if (bound.isEmpty()) {
-            noteUnbound(message.conversationId());
+            noteUnbound(message);
             return;
         }
         BridgeConfig.Target target = bound.get();
@@ -101,7 +102,7 @@ public final class QqToMc {
     public void onGroupMemberChange(QQNoticeEvent notice) {
         Optional<BridgeConfig.Target> bound = target(notice);
         if (bound.isEmpty()) {
-            noteUnbound(notice.conversationId());
+            noteUnbound(notice);
             return;
         }
         BridgeConfig.Target target = bound.get();
@@ -139,12 +140,17 @@ public final class QqToMc {
      * and {@code /qq bind}, and the first sighting is loud enough to be found in a log. Once per group and not
      * once per message, or a busy group would own the console.
      */
-    private void noteUnbound(String groupOpenid) {
-        if (unbound.remember(botId, groupOpenid)) {
-            Log.warn("config: 收到群 " + groupOpenid + " 的消息，但它没绑定 —— 在控制台敲 /qq bind 就能绑上"
-                    + "（或把 " + groupOpenid + " 填进 config.yml 的 group-openid）");
+    private void noteUnbound(QQEvent event) {
+        String conversationId = QqEvents.conversationId(event);
+        boolean channel = event.scene() == ReplyTarget.CHANNEL;
+        BridgeConfig.Kind kind = channel ? BridgeConfig.Kind.CHANNEL : BridgeConfig.Kind.GROUP;
+        String what = channel ? "子频道 " : "群 ";
+        if (unbound.remember(botId, kind, conversationId, QqEvents.guildId(event))) {
+            Log.warn("config: 收到" + what + conversationId + " 的消息，但它没绑定 —— 在控制台敲 /qq bind 就能绑上"
+                    + "（或把 " + conversationId + " 填进 config.yml 的 "
+                    + (channel ? "channel-id" : "group-openid") + "）");
         } else {
-            Log.debug("收到群 " + groupOpenid + " 的消息，这个群还是没绑定，忽略");
+            Log.debug("收到" + what + conversationId + " 的消息，它还是没绑定，忽略");
         }
     }
 

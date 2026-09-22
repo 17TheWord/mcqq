@@ -40,7 +40,7 @@ bots:
 
     # 群有两种填法：
     #   ① 留空：把下面的 groups 整段删掉，或写成 []。开服后在群里 @ 一下机器人，再在控制台敲 /qq bind，
-    #      插件会把最近说话的那个群写进这个文件并自动重载。
+    #      插件会把最近说话的那个群写进这个文件并自动重载（子频道同理，见下面的 channels）。
     #   ② 直接填：把群的 openid 写在下面。openid **不是** QQ 群号；走 ① 时它会打在日志和 /qq status 里。
     groups:
       - group-openid: "REPLACE_ME" # 群的 openid，不是 QQ 群号

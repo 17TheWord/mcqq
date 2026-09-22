@@ -32,7 +32,7 @@ public final class BindCommand extends SubCommand {
 
     @Override
     public String description() {
-        return "把机器人收到过消息的群绑上（写进 config.yml 并重载；不带参数 = 绑最近说话的那个）";
+        return "把机器人收到过消息的群 / 子频道绑上（写进 config.yml 并重载；不带参数 = 绑最近说话的那个）";
     }
 
     @Override
@@ -42,7 +42,7 @@ public final class BindCommand extends SubCommand {
         if (target == null) {
             return nothingToBind(args, groups);
         }
-        return bridge.bindGroup(target);
+        return bridge.bind(target);
     }
 
     /** Why nothing was bound, and what could be — the two questions this command is asked in practice. */
