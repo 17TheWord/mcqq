@@ -3,7 +3,35 @@
 > 2026-09-21 之后的补充都写在这里，最新的在最前面。历史轮次保留原文（它们记录的是当时的判断，
 > 里面的 `mc_qq`、`config/mc-qq/` 等字样是**当时**的事实，不是现在的）。
 
-## 平台重构第 4 步：抽公共配置（2026-09-22，最新）
+## forge-1.20.1 可行性复核（2026-09-22，最新）
+
+用户问"给 forge 支持 1.20.1 要怎么做、好不好做"。**只调研，没动代码**；产出写进
+`docs/MULTIPLATFORM.md` **§8.6**。要点：
+
+* **代际差已实测**：1.20.1 官方 MDK = Gradle **8.8** + FG `[6.0,6.2)` + Java **17** + forge 47.4.23；
+  本项目 = Gradle 9.7.1 + FG `[7.0.17,8)` + Java 25。→ 必须独立构建（`legacy/`），
+  三条硬约束里任一条都够：同一 plugin id 不能有两个版本；FG 7 强制 Gradle ≥ 9.3.0
+  （依据 ForgeGradle `FG_7.0` 分支 commit "Bump minimum Gradle to 9.3.0"）。
+* ⚠️ **发现文档里一个系统性错误**：8.5 / 9.3 / 9.4 都写"core release 17"，
+  实际 `gradle.properties:70` 是 **`core_java_release=21`**，而且降到 17 **编不过**：
+  `./gradlew :core:build -Pcore_java_release=17` →
+  `BridgeRuntime.java:43 错误: 找不到符号 Executors.newVirtualThreadPerTaskExecutor()`。
+  虚拟线程是 Java 21 API，core 里只此一处（全仓 grep 确认）。→ 已修正文档，并加了 §8.6。
+* ⚠️ **第二处低估**：8.5 说"1.20.1 的 adapter 差异只有两处改名"，实测**不止**。
+  对照 `refs/QueQiao/forge/origin`（真跨 1.16.5→1.21 的源码）：26.x 用
+  `ServerChatEvent.BUS.addListener(...)` + `getUsername()/getRawText()`，
+  1.20.1 用 `MinecraftForge.EVENT_BUS.register(this)` + `@SubscribeEvent` +
+  `getPlayer()/getMessage().getString()`；`@Mod` 构造器也从"注入 FMLJavaModLoadingContext"回到无参。
+  影响 `McQqMod` / `McToQq` / `ForgePlatform`（177 行里的多数）。
+  好消息：`sendSystemMessage(Component)` 1.19+ 就有（鹊桥 `// IF >= forge-1.19`），那两行不用改。
+* **结论**：结构上一步（照抄 settings 的按需 include 门控 + 自己的 wrapper），代码上两步
+  （core 去虚拟线程 → release 17；forge 适配器换事件模型）。
+* 顺手补了 legacy 共享 core 的**第三个选择**：legacy 直接把 `core/src/main/java` 加进自己的 sourceSet
+  （core 的依赖**全是 `compileOnly`**，已核实）—— 最省，且 release 级别由 legacy 自己定。
+
+**没有落地任何代码**。`refs/` 里的 1.20.1 MDK 与鹊桥源码是本次的唯一证据来源。
+
+## 平台重构第 4 步：抽公共配置（2026-09-22）
 
 两块：
 
