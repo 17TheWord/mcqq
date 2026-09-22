@@ -1,8 +1,7 @@
 name: Test
 
-# 每次推 main 与每个 PR 都跑一次完整构建：三个平台的 jar 都编出来，core 的测试全跑。
-# 仿照 QueQiaoTool 的 test.yaml，区别是它跑 `./gradlew check`，这里跑 `build` ——
-# 因为本项目最容易坏的恰恰是"某个平台编不过"，只跑 check 抓不到。
+# 推 main 与每个 PR 都跑：**每个平台各一格**，并行，哪一格挂了就是哪个平台坏了。
+# 平台清单来自 .github/workflows/platforms.yml —— 加平台只改那一个文件。
 on:
   push:
     branches:
@@ -11,10 +10,20 @@ on:
     types: [ opened, synchronize ]
 
 jobs:
+  platforms:
+    uses: ./.github/workflows/platforms.yml
+
   build:
+    needs: platforms
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    strategy:
+      # 一格失败不影响其他格：四个平台的编译结果一次看全，不用改一个跑一遍。
+      fail-fast: false
+      matrix: ${{ fromJson(needs.platforms.outputs.matrix) }}
+    # 让检查列表里显示成 "build (fabric)" 而不是一串参数。
+    name: ${{ matrix.name }}
 
     steps:
       - name: Checkout repository
@@ -25,18 +34,14 @@ jobs:
         with:
           java-version: '25'
 
-      # -PwithForge=true：Forge 在 settings.gradle.kts 里是按需 include 的（它的工具链在配置阶段下载，
-      # 网速差的机器上会让整个构建不可用）。CI runner 的网络没问题，所以这里带上它。
-      - name: Build every platform and run the tests
-        run: ./gradlew clean build -PwithForge=true --stacktrace
+      # 每格都跑一遍 core 的测试：测试本身只有几十毫秒，换来的是"这一格的平台在 core 旁边也编译得过"。
+      # matrix.properties 只有 forge 那格非空（-PwithForge=true），见 platforms.yml 的说明。
+      - name: Build ${{ matrix.name }} and run the tests
+        run: ./gradlew :core:test ${{ matrix.project }}:build ${{ matrix.properties }} --stacktrace
 
-      - name: Keep the three jars around
+      - name: Keep the ${{ matrix.name }} jar
         uses: actions/upload-artifact@v4
         with:
-          name: mc-qq-${{ env.VERSION }}-jars
-          path: |
-            fabric/build/libs/mc-qq-*.jar
-            neoforge/build/libs/mc-qq-*.jar
-            forge/build/libs/mc-qq-*.jar
-            bukkit/build/libs/mc-qq-*.jar
+          name: mc-qq-${{ needs.platforms.outputs.version }}-${{ matrix.name }}
+          path: ${{ matrix.jar }}
           if-no-files-found: error

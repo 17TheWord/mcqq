@@ -3,7 +3,32 @@
 > 2026-09-21 之后的补充都写在这里，最新的在最前面。历史轮次保留原文（它们记录的是当时的判断，
 > 里面的 `mc_qq`、`config/mc-qq/` 等字样是**当时**的事实，不是现在的）。
 
-## Forge 进 CI + 本地按需开关（2026-09-22，最新）
+## 矩阵抽成单一出处（2026-09-22，最新）
+
+用户指出：平台清单散在三个地方（test 的 artifact 路径、release 的矩阵 JSON、release 的附件），
+"后续更新版本要在一个 yml 改，test 和 release 都能用"。
+
+**改法**：新增可复用工作流 `.github/workflows/platforms.yml`（`workflow_call`），输出
+`version` / `game_versions` / `matrix`；test 与 release 都 `uses:` 它。于是：
+
+* **平台清单只有一个地方**：加平台 = 往矩阵里加一行（`name` / `project` / `jar` / `loaders` / `properties`）。
+* **版本事实只有一个地方**：`gradle.properties`（`mod_version`、`publish_game_versions`、
+  `minecraft_version_range`）—— platforms.yml 只读不写，四个描述符里的范围本来也是 Gradle 从同一份文件
+  expand 出来的。所以"改版本号/改 MC 窗口"根本不碰 workflow。
+* 矩阵里多一个 `properties` 字段：**只有 forge 那格**带 `-PwithForge=true`。因为 Gradle 会配置所有 include
+  的项目，若每格都带上，其他三格也要白下一遍 Forge 工具链。
+
+**test 与 release 的矩阵用法不同（刻意的）**：
+
+* test：**每平台一格并行**（`fail-fast: false`），每格 `:core:test :<平台>:build` —— 换来失败隔离
+  （哪格挂了就是哪个平台坏了），代价是工具链各下一遍。
+* release：build **一次**出全四个产物，矩阵只用在发布（拆成四格只会把工具链下载四遍，而发布本来就是每产物一次）。
+
+**验证**：四个 YAML 都过解析；把 platforms.yml 的矩阵那段与"读版本事实"那段**切出来原样执行**，
+输出 4 格合法 JSON（`json.loads` 验过）、`version=0.1.0`、`game_versions=[26.1, 26.2]`；
+release 里拼 jar 列表那段也跑过，四个路径都对。
+
+## Forge 进 CI + 本地按需开关（2026-09-22）
 
 接着上一条：本机下不动 Forge 工具链，但 **CI runner 的网络没问题**，所以让 CI 来跑它，本地保持可用。
 

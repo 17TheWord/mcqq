@@ -1,5 +1,7 @@
 # mc-qq — Minecraft ↔ QQ 官方机器人桥（Fabric，Minecraft 26.1.2）
 
+> 纯 `Vibe` 项目，少量 `Review` 凑合用。
+
 服务端 Fabric mod：把群聊天、进群退群从 QQ 搬进 Minecraft 聊天栏，把玩家聊天、进服退服、死亡按配置广播到 QQ 群。
 QQ 侧走 [qqbot-java-sdk](https://github.com/skiesworld/qqbot-java-sdk) 0.0.4 的网关连接，配置在 `config/mcqq/config.yml`，
 改完 `/qq reload` 生效。
@@ -192,15 +194,24 @@ templates:
 `build.yml`（它每个"平台×版本"格子独立构建，再用 `Kir-Antipov/mc-publish` 按各自的 loaders 与
 game-versions 发到 Modrinth / CurseForge）：
 
+**"有哪些平台"只写在一个地方**：`workflows/platforms.yml`（可复用工作流）。test 与 release 都 `uses:` 它，
+所以加平台、改 jar 名、改 loaders 只动那一个文件；而**版本事实**（`mod_version`、`publish_game_versions`、
+`minecraft_version_range`）的唯一出处是 `gradle.properties`，platforms.yml 只负责读出来。
+
 | 文件 | 什么时候跑 | 干什么 |
 | --- | --- | --- |
-| `actions/set-java/action.yml` | 被下面两个调用 | 装 JDK 25、配 Gradle 缓存、把 `mod_version` 导出成 `VERSION` |
-| `workflows/test.yml` | 推 main、每个 PR | `./gradlew clean build -PwithForge=true`（四个平台都编、47 个测试都跑），四个 jar 存成 artifact |
-| `workflows/release.yml` | 打 `v*` 标签 | 校验标签与 `mod_version` 一致 → 构建（含 Forge）→ 存 artifact + 建 GitHub Release → **矩阵**：四个产物各一格，并行各发一次 mc-publish |
+| `workflows/platforms.yml` | 被下面两个 `uses:` | 从 `gradle.properties` 读出版本事实，并生成**平台矩阵**（name / 子项目 / jar / loaders / 额外参数） |
+| `actions/set-java/action.yml` | 被各 job 调用 | 装 JDK 25、配 Gradle 缓存 |
+| `workflows/test.yml` | 推 main、每个 PR | **每个平台一格、并行**（`fail-fast: false`）：`./gradlew :core:test :<平台>:build`，哪格挂了就是哪个平台坏了；每格存自己的 jar |
+| `workflows/release.yml` | 打 `v*` 标签 | 校验标签与 `mod_version` 一致 → 一次构建出全部产物 → 存 artifact + 建 GitHub Release → **发布矩阵**：四个产物各一格，并行各发一次 mc-publish |
 
-矩阵用在**发布**上：三个产物各一格（`fabric` / `neoforge` / `paper`），并行，各自声明自己的 `loaders`
-与 `game-versions` —— 和 QueQiao 的矩阵是同一个形状，只是它那边每格还要自己 build（每格是独立工程），
-我们一次 `./gradlew build` 就出全三个，拆成三格只会把 MC 工具链下载三遍，所以构建不拆。
+矩阵和 QueQiao 是同一个形状（每格一次 mc-publish，并行，各自声明 `loaders` 与 `game-versions`）。
+两处用法不同，是有意的：
+
+* **test** 用矩阵做**并行 + 失败隔离**：四格各自 `:core:test :<平台>:build`，一眼看出是哪个平台坏了。
+  代价是 MC 工具链各下一遍（runner 网络快，换来的是定位速度）。
+* **release** 只 build **一次**（出全四个产物），矩阵只用在发布：拆成四格只会把工具链下载四遍，
+  而发布本来就是每个产物一次。
 
 **没配项目 id 时 `publish` 整个 job 跳过**：构建、Actions artifacts、GitHub Release 照常，只是不上架。
 想先手动传 Modrinth/CF 的话，从那次 Actions 运行的 artifacts 里下载三个 jar 即可。

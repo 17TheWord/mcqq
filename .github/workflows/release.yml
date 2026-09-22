@@ -2,13 +2,13 @@ name: Release
 
 # 打一个 v* 标签就发一次。
 #
-# 形状照 17TheWord/QueQiao 的 .github/workflows/build.yml：
-#   ① 先算出一个矩阵（那边是 matrix.sh 扫目录出 JSON；这里三个产物是固定的，直接写出来）
-#   ② 矩阵里**每个产物各跑一次 mc-publish**，并行，各自声明自己的 loaders 与 game-versions
+# 平台清单与 MC 窗口来自 .github/workflows/platforms.yml（**唯一一份**），所以加平台只改那一个文件。
 #
-# 与那边唯一的差别：**构建不拆进矩阵**。QueQiao 每个格子是独立工程，所以每格自己 build；
-# 本项目一次 `./gradlew build` 就出全三个产物，拆成三格只会把 MC 工具链下载三遍。
-# 矩阵只用在"发布"这一步 —— 那本来就是每个产物一次。
+# 形状照 17TheWord/QueQiao 的 .github/workflows/build.yml：先算出矩阵，再让**每个产物各跑一次
+# mc-publish**（并行，各自声明 loaders 与 game-versions）。
+#
+# 与那边唯一的差别：**构建不拆进矩阵**。QueQiao 每格是独立工程，所以每格自己 build；本项目一次
+# `./gradlew build` 就出全部产物，拆成四格只会把 MC 工具链下载四遍。
 #
 # 现阶段没有 Modrinth / CurseForge 的项目 id：**publish 整个 job 会被跳过**，
 # 构建、产物留存（Actions artifacts）与 GitHub Release 照常进行。
@@ -26,16 +26,16 @@ env:
   #   Secrets:   MODRINTH_TOKEN / CURSEFORGE_TOKEN
   MODRINTH_ID: ${{ vars.MODRINTH_ID }}
   CURSEFORGE_ID: ${{ vars.CURSEFORGE_ID }}
-  # 实测过的窗口，三个产物共用（26.3 还是 pre，不声称）。
-  GAME_VERSIONS: '[26.1, 26.2]'
 
 jobs:
+  platforms:
+    uses: ./.github/workflows/platforms.yml
+
   build:
+    needs: platforms
     runs-on: ubuntu-latest
     outputs:
-      matrix: ${{ steps.matrix.outputs.matrix }}
-      version: ${{ steps.version.outputs.version }}
-      prerelease: ${{ steps.version.outputs.prerelease }}
+      prerelease: ${{ steps.tag.outputs.prerelease }}
 
     steps:
       - name: Checkout repository
@@ -46,52 +46,34 @@ jobs:
         with:
           java-version: '25'
 
-      # 版本号只有一个出处（gradle.properties 的 mod_version），标签必须和它一致，
-      # 否则产物的文件名、Modrinth 上的版本号会与标签对不上。
+      # 版本号只有一个出处（gradle.properties 的 mod_version，由 platforms.yml 读出来），
+      # 标签必须和它一致，否则产物的文件名、Modrinth 上的版本号会与标签对不上。
       - name: Check the tag matches the version in gradle.properties
         shell: bash
         run: |
-          if [ "v$VERSION" != "${GITHUB_REF_NAME}" ]; then
-            echo "::error::标签 ${GITHUB_REF_NAME} 与 gradle.properties 里的 v$VERSION 不一致；先改 mod_version 再打标签。"
+          if [ "v${{ needs.platforms.outputs.version }}" != "${GITHUB_REF_NAME}" ]; then
+            echo "::error::标签 ${GITHUB_REF_NAME} 与 gradle.properties 里的 v${{ needs.platforms.outputs.version }} 不一致；先改 mod_version 再打标签。"
             exit 1
           fi
 
-      # 标签里带连字符就当作预发布（v0.2.0-beta.1）。这两个值要给 publish job 用，
-      # 所以写成 job output —— 跨 job 的 env 是不通的。
-      - name: Expose the version and whether this is a prerelease
-        id: version
+      # 标签里带连字符就当作预发布（v0.2.0-beta.1）。这个值要给 publish job 用，所以写成 job output
+      # —— 跨 job 的 env 是不通的。
+      - name: Decide whether this is a prerelease
+        id: tag
         shell: bash
         run: |
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
           case "${GITHUB_REF_NAME}" in
             *-*) echo "prerelease=true"  >> $GITHUB_OUTPUT ;;
             *)   echo "prerelease=false" >> $GITHUB_OUTPUT ;;
           esac
 
-      # 矩阵就是三个产物：文件名、给哪个 loader。loaders 只写真跑过的 ——
-      # Bukkit 那份是 Paper 与 Folia（Spigot 明确不支持，插件会自己停用并说明）。
-      - name: Generate the publish matrix
-        id: matrix
-        shell: bash
-        run: |
-          # 用 printf 拼，不用 heredoc 也不用 jq：heredoc 的结束标记要求顶格，会被 YAML 块标量的缩进破坏；
-          # jq 是又一个要赌存在的东西，而 printf 在任何 runner 上都有、本地也能照着跑一遍。
-          matrix=$(printf '{"include":['\
-          '{"name":"fabric","file":"mc-qq-%s.jar","loaders":"fabric"},'\
-          '{"name":"neoforge","file":"mc-qq-neoforge-%s.jar","loaders":"neoforge"},'\
-          '{"name":"paper","file":"mc-qq-bukkit-%s.jar","loaders":"paper folia"},'\
-          '{"name":"forge","file":"mc-qq-forge-%s.jar","loaders":"forge"}'\
-          ']}' "$VERSION" "$VERSION" "$VERSION" "$VERSION")
-          echo "$matrix"
-          echo "matrix=$matrix" >> $GITHUB_OUTPUT
-
       - name: Build every platform and run the tests
         run: ./gradlew clean build -PwithForge=true --stacktrace
 
-      - name: Keep the three jars
+      - name: Keep the jars
         uses: actions/upload-artifact@v4
         with:
-          name: mc-qq-${{ env.VERSION }}
+          name: mc-qq-${{ needs.platforms.outputs.version }}
           path: |
             fabric/build/libs/mc-qq-*.jar
             neoforge/build/libs/mc-qq-*.jar
@@ -99,39 +81,38 @@ jobs:
             bukkit/build/libs/mc-qq-*.jar
           if-no-files-found: error
 
-      - name: Create the release and attach the three jars
+      - name: Create the release and attach the jars
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          if [ "${{ steps.version.outputs.prerelease }}" = "true" ]; then
-            gh release create "${GITHUB_REF_NAME}" --generate-notes --prerelease \
-              "fabric/build/libs/mc-qq-${VERSION}.jar" \
-              "neoforge/build/libs/mc-qq-neoforge-${VERSION}.jar" \
-              "forge/build/libs/mc-qq-forge-${VERSION}.jar" \
-              "bukkit/build/libs/mc-qq-bukkit-${VERSION}.jar"
+          JARS=$(printf '%s ' \
+            "fabric/build/libs/mc-qq-${{ needs.platforms.outputs.version }}.jar" \
+            "neoforge/build/libs/mc-qq-neoforge-${{ needs.platforms.outputs.version }}.jar" \
+            "forge/build/libs/mc-qq-forge-${{ needs.platforms.outputs.version }}.jar" \
+            "bukkit/build/libs/mc-qq-bukkit-${{ needs.platforms.outputs.version }}.jar")
+          if [ "${{ steps.tag.outputs.prerelease }}" = "true" ]; then
+            gh release create "${GITHUB_REF_NAME}" --generate-notes --prerelease $JARS
           else
-            gh release create "${GITHUB_REF_NAME}" --generate-notes \
-              "fabric/build/libs/mc-qq-${VERSION}.jar" \
-              "neoforge/build/libs/mc-qq-neoforge-${VERSION}.jar" \
-              "forge/build/libs/mc-qq-forge-${VERSION}.jar" \
-              "bukkit/build/libs/mc-qq-bukkit-${VERSION}.jar"
+            gh release create "${GITHUB_REF_NAME}" --generate-notes $JARS
           fi
 
   publish:
-    needs: build
+    needs: [ platforms, build ]
     # 没有项目 id 就整段跳过：这一步是"上架"，不是"发版"。
     if: vars.MODRINTH_ID != '' || vars.CURSEFORGE_ID != ''
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      matrix: ${{ fromJson(needs.build.outputs.matrix) }}
-    # 这个 job 不 checkout、不装 Gradle：只用上一个 job 传过来的版本号与产物。
+      matrix: ${{ fromJson(needs.platforms.outputs.matrix) }}
+    name: ${{ matrix.name }}
+
     steps:
+      # 这个 job 不 checkout、不装 Gradle：只用上一个 job 传过来的产物与矩阵里的元数据。
       - name: Fetch the jars built by the previous job
         uses: actions/download-artifact@v4
         with:
-          name: mc-qq-${{ needs.build.outputs.version }}
+          name: mc-qq-${{ needs.platforms.outputs.version }}
           path: jars
 
       - name: Publish ${{ matrix.name }}
@@ -141,10 +122,10 @@ jobs:
           modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
           curseforge-id: ${{ env.CURSEFORGE_ID }}
           curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
-          name: mc-qq ${{ needs.build.outputs.version }} (${{ matrix.name }})
-          # 同一版本号的三个产物必须能区分开，所以加 loader 后缀。
-          version: ${{ needs.build.outputs.version }}+${{ matrix.name }}
+          name: mc-qq ${{ needs.platforms.outputs.version }} (${{ matrix.name }})
+          # 同一版本号的多个产物必须能区分开，所以加 loader 后缀。
+          version: ${{ needs.platforms.outputs.version }}+${{ matrix.name }}
           version-type: ${{ needs.build.outputs.prerelease == 'true' && 'beta' || 'release' }}
           loaders: ${{ matrix.loaders }}
-          game-versions: ${{ env.GAME_VERSIONS }}
-          files: jars/${{ matrix.file }}
+          game-versions: ${{ needs.platforms.outputs.game_versions }}
+          files: jars/${{ matrix.jar }}
