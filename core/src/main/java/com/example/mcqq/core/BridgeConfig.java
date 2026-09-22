@@ -24,9 +24,15 @@ import org.yaml.snakeyaml.Yaml;
 /**
  * {@code config/mcqq/config.yml}: which bots run, which groups they bridge, and which Minecraft events go out.
  *
- * <p>The secret is read from the environment by name rather than stored in the file, because this file sits in a
- * server directory that gets copied, backed up and screenshotted. A missing file is created from the packaged
- * template, so a first start shows an admin what the knobs are instead of failing.
+ * <p>The AppSecret can be written straight into this file ({@code secret:}) or named as an environment variable
+ * ({@code secret-env:}). **The file is the primary way on purpose**: panel hosts do not let the owner set
+ * environment variables at all, and on a panel the provider can read the process environment anyway — so
+ * requiring one bought nothing there and shut out most of the people who would use this. The environment
+ * variable stays for self-hosted servers, where keeping the secret out of a file that gets backed up and pasted
+ * into bug reports is worth something.
+ *
+ * <p>A missing file is created from the packaged template, so a first start shows an admin what the knobs are
+ * instead of failing.
  *
  * <p>Nothing here mentions Minecraft: this class is the reason the core can be tested without a game.
  */
@@ -112,12 +118,14 @@ public final class BridgeConfig {
 
         private final String id;
         private final String appId;
+        private final String secret;
         private final String secretEnvironmentVariable;
         private final Map<String, Group> groups;
 
-        Bot(String id, String appId, String secretEnvironmentVariable, Map<String, Group> groups) {
+        Bot(String id, String appId, String secret, String secretEnvironmentVariable, Map<String, Group> groups) {
             this.id = id;
             this.appId = appId;
+            this.secret = secret;
             this.secretEnvironmentVariable = secretEnvironmentVariable;
             // Copy, but keep the file's order: Map.copyOf would shuffle the groups in /qq status and in the
             // forward loop.
@@ -132,6 +140,12 @@ public final class BridgeConfig {
             return appId;
         }
 
+        /** The AppSecret as written in the file; empty when this bot names an environment variable instead. */
+        public String secret() {
+            return secret;
+        }
+
+        /** The environment variable holding the AppSecret; never blank, because it has a default. */
         public String secretEnvironmentVariable() {
             return secretEnvironmentVariable;
         }
@@ -393,7 +407,21 @@ public final class BridgeConfig {
             if (bots.containsKey(key)) {
                 problems.add("duplicate bot id " + key + "; the later one wins");
             }
-            bots.put(key, new Bot(id, appId, orDefault(text(botMap.get("secret-env")), "QQ_BOT_SECRET"), groups));
+            // A secret still carrying the template's placeholder counts as absent: the runtime then says what to
+            // write, instead of handing "REPLACE_ME" to the platform and reporting a login failure.
+            String secret = text(botMap.get("secret"));
+            if (secret.contains(PLACEHOLDER)) {
+                problems.add("bot " + id + " still has the " + PLACEHOLDER + " secret from the template");
+                secret = "";
+            }
+            // Both written is a config nobody means to write, and silently picking one is how "why is it still
+            // using the old secret" starts. The file wins, and this says so.
+            String secretEnv = text(botMap.get("secret-env"));
+            if (!secret.isEmpty() && !secretEnv.isEmpty()) {
+                problems.add("bot " + id + ": secret 与 secret-env 都填了，用 secret"
+                        + "（要改用环境变量就把 secret 删掉）");
+            }
+            bots.put(key, new Bot(id, appId, secret, orDefault(secretEnv, "QQ_BOT_SECRET"), groups));
         }
         return new BridgeConfig(bots, templates, truthy(root.get("debug")), problems);
     }

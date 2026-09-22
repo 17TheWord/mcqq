@@ -1,7 +1,9 @@
 # MC ↔ QQ bridge. Reload with /qq reload after editing, or restart the server.
 #
-# The secret is never stored here: name the environment variable the server was started with, so this file can
-# be copied, backed up and pasted into a bug report without leaking anything.
+# ⚠️ 这个文件里会有 AppSecret（下面的 `secret:`）。所以**别把 config.yml 贴到 issue / 群里** —— 要贴就贴这份
+# config.example.yml（它没有密钥）。想连文件里都不放密钥，见下面 `secret-env:` 那段。
+#
+# 面板服没法设环境变量，所以密钥就直接写在文件里；自建服想把它留在环境变量里，用 `secret-env:` 代替。
 
 # 打开后会把"为什么这条消息没有转发"的每一个判断都写进日志，转发成功时也会打印实际内容。
 # 排障时开，平时关 —— 服务端日志会明显变多。
@@ -25,7 +27,11 @@ templates:
 bots:
   - id: main                       # any label you like; it shows up in /qq status
     app-id: "REPLACE_ME"           # QQ 开放平台的 AppID
-    secret-env: QQ_BOT_SECRET      # environment variable holding the AppSecret
+    secret: "REPLACE_ME"           # QQ 开放平台的 AppSecret。**面板服就写这里** —— 它们不让设环境变量。
+
+    # 自建服想把密钥留在环境变量里（不进这个文件）时：删掉上面那行 secret，改用这一行写变量名。
+    # 两个都填的话以文件里的 secret 为准，日志里会说一声。
+    # secret-env: QQ_BOT_SECRET
 
     groups:
       - group-openid: "REPLACE_ME" # the group's openid, not its QQ number

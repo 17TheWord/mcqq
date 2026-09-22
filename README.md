@@ -174,19 +174,25 @@ Paper 用真服务端 + `plugins/`，Fabric 用真服务端 + `mods/`，NeoForge
 （缺键走内置默认），所以这一步不改变任何行为，只是让你能看见并改它。
 带注释的说明始终在 `config.example.yml` 里 —— 补过的 `config.yml` 顶部会指向它。
 
-**AppSecret 不写进任何文件**，只写它的环境变量名：
+**AppSecret 直接写在 `config.yml` 里** —— 面板服不让服主设环境变量，所以这是主路径：
 
 ```yaml
 bots:
   - id: main
     app-id: "123456789"
-    secret-env: QQ_BOT_SECRET
+    secret: "你的 AppSecret"
     groups:
       - group-openid: "xxxxxxxx"
         label: MC 主群
         receive-from-qq: true
         send-to-qq: [chat, join, quit, death]
 ```
+
+自建服想把密钥留在环境变量里（不进文件）时，把 `secret:` 那行换成 `secret-env: QQ_BOT_SECRET` 即可；
+两个都填以文件里的为准，日志里会说一声。
+
+⚠️ 因为密钥现在就在这个文件里，**别把 `config.yml` 贴到 issue / 群里** —— 要贴就贴同目录那份
+`config.example.yml`（它是模板，没有你的密钥）。
 
 * `group-openid` 是群的 openid，不是 QQ 群号。拿它最快的办法：在群里 @ 一次机器人，然后看服务端日志或
   `/qq status`；也可以在后台的群管理接口里查。

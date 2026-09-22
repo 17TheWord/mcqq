@@ -93,6 +93,71 @@ class BridgeConfigTest {
     }
 
     @Test
+    void readsTheSecretStraightFromTheFile() throws Exception {
+        // 面板服不让设环境变量，所以"密钥写在文件里"是主路径 —— 这条别悄悄回归。
+        BridgeConfig config = read("""
+                bots:
+                  - id: main
+                    app-id: "123456789"
+                    secret: "abc123"
+                    groups:
+                      - group-openid: "G1"
+                """);
+
+        assertTrue(config.problems().isEmpty(), config.problems().toString());
+        assertEquals("abc123", config.bots().get(0).secret());
+    }
+
+    @Test
+    void aPlaceholderSecretCountsAsAbsent() throws Exception {
+        // 模板里的 REPLACE_ME 不该被当成真密钥发给平台 —— 那只会换来一次登录失败，而不是一句"去填它"。
+        BridgeConfig config = read("""
+                bots:
+                  - id: main
+                    app-id: "123456789"
+                    secret: "REPLACE_ME"
+                    groups:
+                      - group-openid: "G1"
+                """);
+
+        assertTrue(config.bots().get(0).secret().isEmpty(), "空串表示没有 —— 与 text() 的约定一致");
+        assertTrue(config.problems().stream().anyMatch(p -> p.contains("REPLACE_ME") && p.contains("secret")),
+                config.problems().toString());
+    }
+
+    @Test
+    void writingBothSecretAndSecretEnvIsReported() throws Exception {
+        // 两个都写是没人会故意写出来的配置；静默挑一个就是"为什么还在用旧密钥"的开端。
+        BridgeConfig config = read("""
+                bots:
+                  - id: main
+                    app-id: "123456789"
+                    secret: "abc123"
+                    secret-env: QQ_BOT_SECRET
+                    groups:
+                      - group-openid: "G1"
+                """);
+
+        assertEquals("abc123", config.bots().get(0).secret());
+        assertTrue(config.problems().stream().anyMatch(p -> p.contains("secret-env")),
+                config.problems().toString());
+    }
+
+    @Test
+    void omittingSecretEnvKeepsTheOldDefault() throws Exception {
+        // 老配置里省略 secret-env 时用的就是这个名字。留着，别让既有配置静默失效。
+        BridgeConfig config = read("""
+                bots:
+                  - id: main
+                    app-id: "123456789"
+                    groups:
+                      - group-openid: "G1"
+                """);
+
+        assertEquals("QQ_BOT_SECRET", config.bots().get(0).secretEnvironmentVariable());
+    }
+
+    @Test
     void theAnnotatedTemplateIsAlsoKeptNextToTheConfig() throws Exception {
         Path file = dir.resolve("mcqq").resolve("config.yml");
 

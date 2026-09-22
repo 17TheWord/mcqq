@@ -122,13 +122,18 @@ public final class BridgeRuntime implements AutoCloseable {
     }
 
     private void start() {
-        // /qq status is the only other way these surface, and an admin who never runs it still needs to know
-        // why nothing arrived.
         for (String problem : config.problems()) {
             Log.warn("config: " + problem);
         }
+        int alreadyLogged = problems.size();
         for (BridgeConfig.Bot bot : config.bots()) {
             register(bot);
+        }
+        // register() adds to the same list, so what it found — "this bot has no credentials, skipped" — has to
+        // be logged here as well. Leaving it to /qq status alone is the worst failure mode there is: the admin
+        // who just pasted a config, sees nothing happen, and only has the log to go on gets no answer at all.
+        for (String problem : problems.subList(alreadyLogged, problems.size())) {
+            Log.warn("config: " + problem);
         }
         if (registered.isEmpty()) {
             connecting = false;
@@ -140,10 +145,19 @@ public final class BridgeRuntime implements AutoCloseable {
     }
 
     private void register(BridgeConfig.Bot botConfig) {
-        String secret = System.getenv(botConfig.secretEnvironmentVariable());
+        // The file first: that is the only option on a panel host, which is where most of these run. The
+        // environment variable is the fallback for self-hosted servers that would rather not keep the secret in
+        // a file at all. (The config already reports it when both are written.)
+        String secret = botConfig.secret();
+        if (secret.isBlank()) {
+            secret = System.getenv(botConfig.secretEnvironmentVariable());
+        }
         if (secret == null || secret.isBlank()) {
-            problems.add("bot " + botConfig.id() + ": 环境变量 " + botConfig.secretEnvironmentVariable()
-                    + " 未设置，已跳过");
+            // Say both ways, because the person reading this is most likely on a panel and has never been able
+            // to set an environment variable in their life.
+            problems.add("bot " + botConfig.id() + ": 没有可用的 AppSecret —— 在 config.yml 里写"
+                    + " secret: <AppSecret>（面板服推荐），或设环境变量 "
+                    + botConfig.secretEnvironmentVariable() + "（自建服）；已跳过");
             return;
         }
         BotConfig qq = BotConfig.builder(botConfig.appId())
