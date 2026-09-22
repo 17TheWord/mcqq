@@ -25,7 +25,7 @@ core 用 release 17 同时服务两代。**不用效仿鹊桥的"每版本一个
 
 ## 已落地（2026-09-21 下午）
 
-前两步都做完了并验证，细节在 [PROGRESS.md](PROGRESS.md)：
+前两步都做完了并验证：
 
 1. **core 抽离**：`core/` + `fabric/`，`clean build` 全绿、9 个测试照旧全过；core 是 Java 21 字节码、0 个 MC 类；
    fabric 的 shadow jar 里 0 处未 relocate、core 的 15 个类已并入、MC 类 0 个。
@@ -48,7 +48,6 @@ Spigot 支持（只有静态证据：Paper 26.1.2 的 `ChatProcessor` 里旧路�
 **打包产物已经验过**：Paper（真服务端 + plugins/）、Fabric（真服务端 + mods/ 里的 shadow jar）、
 NeoForge（dev 启动器 + run/mods/ 里的 jar）都加载并跑通了命令；relocate 在生产可用的直接证据是
 配置读写走的正是被改名过的 snakeyaml。
-详见 [PROGRESS.md](PROGRESS.md)。
 
 **下一步候选**：① 找个人在 Paper 上打一句话，把聊天转发证掉；② 继续加 `neoforge/`（工具链已核实：
 ModDevGradle 2.0.147 + 26.1.2.109）；③ 等 26.3 稳定后补那一跳。
@@ -73,7 +72,7 @@ ModDevGradle 2.0.147 + 26.1.2.109）；③ 等 26.3 稳定后补那一跳。
   `implementation minecraft.dependency('net.minecraftforge:forge:26.1.2-64.1.3')`。
   官方下载页当前 latest = `26.1.2-64.1.3`、recommended = `64.1.0`。**Forge 26.x 活着**，别信某些二手博客说它已死。
 * **Paper**：`repo.papermc.io` 的 `paper-api` metadata 里 26.1 线是 `26.1.2.build.74-stable` 这种形式
-  （**不是** `-R0.1-SNAPSHOT`，PROGRESS.md 里"Paper 26.x build"可以换成这个确切写法）。
+  （**不是** `-R0.1-SNAPSHOT`）。
   把 jar 拉下来看：`io/papermc/paper/event/player/AsyncChatEvent`、`org/bukkit/event/player/AsyncPlayerChatEvent`、
   `PlayerDeathEvent`、`PlayerJoinEvent`、`PlayerQuitEvent` 都在；
   `io/papermc/paper/threadedregions/scheduler/*`（Folia）和 `io/papermc/paper/command/brigadier/Commands` 也在。
@@ -348,8 +347,6 @@ SDK 是 `--release 17`，所以 **core 停在 release 17 就同时服务 1.20.1 
   以 `InvalidPluginException: Unsupported API version 1.20.1` 拒绝。所以 1.20.1 要写 `'1.20'`。
 * 原做法（编译对 26.1.2）的失败方向是**反的**：那不是"往高版本跑不了"，而是**往低版本装不了**。
   编译对最新只损失兼容范围，不会损失功能 —— 所以没有理由那么做。
-
-完整记录（含改了什么、怎么验的）见 `docs/PROGRESS.md`。
 
 ### 8.3 Fabric：能，但要多一个"老工具链"子项目
 
@@ -681,7 +678,7 @@ curl -s "https://bstats.org/api/v1/plugins/5304/charts/minecraftVersion/data"
    NeoForge/Forge 的 `versionRange=[26.1,)`、Paper 的 `api-version: '26.1'`。
    **这条已经从先验假设变成实测**（2026-09-21）：编译对 26.1.2 的 bukkit jar 直接跑在 Paper 26.2 上
    （`/qq status` 报 `平台 paper-26.2`）；Fabric 侧用 26.2 + Fabric API 0.161.0+26.2 **源码一行没改就编译通过并加载**。
-   细节与口径见 [PROGRESS.md](PROGRESS.md)。**26.3 那一跳还没验**（现在还是 pre）。
+   **26.3 那一跳还没验**（现在还是 pre）。
 2. **命令用最保守的注册方式**：`plugin.yml` 的 `commands:` + `onCommand`，**不要**用 Paper 的 Brigadier
    与 `paper-plugin.yml`。这是唯一一处"用了 26 独有 API 就得为以后降版本重写"的地方；
    其余（4 个事件、广播、配置目录、主线程 hop）在最老的 API 上也都有。

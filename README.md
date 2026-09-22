@@ -10,11 +10,8 @@ QQ 侧走 [qqbot-java-sdk](https://github.com/skiesworld/qqbot-java-sdk) 0.0.4 �
 
 | 文件 | 是什么 |
 | --- | --- |
-| [docs/PROGRESS.md](docs/PROGRESS.md) | **当前状态**：哪些已经真机验过、哪些还没、下一步。按轮次记录。 |
-| [docs/MULTIPLATFORM.md](docs/MULTIPLATFORM.md) | 为什么是这个形状：平台/版本矩阵的调研、路线取舍、每条结论的证据。 |
-| [docs/PLATFORM-PLAN.md](docs/PLATFORM-PLAN.md) | **平台重构规划**：拆 bukkit 一族（含 Spigot 的实测占比）、嵌套版本窗口、抽公共配置。 |
 | [docs/VERSIONS.md](docs/VERSIONS.md) | **加一个新 MC 版本要做什么**：三种情况、具体步骤、什么时候才需要加"版本窗口"子项目。 |
-| [docs/QUEQIAO-NOTES.md](docs/QUEQIAO-NOTES.md) | 从同作者的 QueQiao / QueQiaoTool 抄了什么、没抄什么、为什么。 |
+| [docs/MULTIPLATFORM.md](docs/MULTIPLATFORM.md) | 为什么是这个形状：平台/版本矩阵的调研、路线取舍、每条结论的证据。 |
 | [docs/TEMPLATES.md](docs/TEMPLATES.md) | 消息模板与占位符的设计（含第三方占位符库的评估）。 |
 | [THIRD-PARTY.md](THIRD-PARTY.md) | 打包进去的第三方组件与许可证。 |
 | [LICENSE](LICENSE) | MIT。 |
@@ -75,7 +72,7 @@ Spigot 直接发 `§` 字符串）。
 ./gradlew build -PwithForge=true     # 需要 Forge 时（CI 就是这么调的）
 ```
 
-CI runner 的网络没问题，所以两个工作流都带了这个参数。细节见 [docs/PROGRESS.md](docs/PROGRESS.md)。
+CI runner 的网络没问题，所以两个工作流都带了这个参数。
 
 ⚠️ **mod 的 id 是 `mcqq`，和项目名 `mc-qq` 不是一回事。** 原因是 NeoForge 的 modId 只允许
 `^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$` —— **连字符直接被拒**，FML 起不来。`mcqq` 是 Fabric、NeoForge、Bukkit

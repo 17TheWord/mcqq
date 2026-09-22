@@ -32,5 +32,5 @@ Apache-2.0 要求分发时附上许可证副本并保留 NOTICE，所以 `LICENS
 ## 为什么 relocate
 
 服务端自己就带 gson 与 snakeyaml（版本还和我们依赖的不一样），mod 生态里 kotlin-stdlib 更是经典撞车项。
-（完整取舍见项目仓库里的 `README.md` 与 `docs/PROGRESS.md` —— 这份文件会被打进 jar，所以这里不写相对链接。）Jar-in-Jar 只负责"把库带上"、不改包名，解决不了撞车；
+（完整取舍见项目仓库里的 `README.md` —— 这份文件会被打进 jar，所以这里不写相对链接。）Jar-in-Jar 只负责"把库带上"、不改包名，解决不了撞车；
 所以这里统一用 shadow + relocate。
