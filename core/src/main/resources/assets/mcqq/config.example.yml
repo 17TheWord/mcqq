@@ -65,4 +65,17 @@ bots:
         #   mc-chat: "[主群] {player}: {text}"
         #   mc-join: ""              # 这个群不播报进服
 
+    # 频道的文字子频道。寻址要 guild-id + channel-id **两个**字段，所以它不在 groups: 里。
+    # label / receive-from-qq / send-to-qq / templates / command 的语义和群里完全一样。
+    # channels:
+    #   - guild-id: "<频道的 ID>"
+    #     channel-id: "<子频道的 ID>"
+    #     label: 主频道
+    #     receive-from-qq: true
+    #     send-to-qq: [chat, join, quit, death]
+    #     command:
+    #       allow: admin                  # 频道主 4 / 管理员 2 由它管
+    #       whitelist: ["<用户 openid>"]
+    #       roles: ["5", "<自定义身份组 ID>"]   # 只放子频道管理员 5 与自定义身份组
+
 # send-to-qq 可选：chat、join、quit、death。整个键删掉就取这四项。

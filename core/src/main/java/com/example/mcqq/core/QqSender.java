@@ -26,25 +26,35 @@ final class QqSender {
     private QqSender() {
     }
 
-    /** Never throws. */
-    static Outcome send(QQBotClient bot, BridgeConfig.Group group, String text) {
+    /** 日志里怎么称呼这个目标 —— 群和子频道分开说，否则出问题时分不清是哪儿。 */
+    private static String where(BridgeConfig.Target target) {
+        return target.kind() == BridgeConfig.Kind.CHANNEL ? "QQ 子频道 " : "QQ 群 ";
+    }
+
+    /** Never throws. 群走群接口、子频道走子频道接口，其余（模板、审核、限流）完全一样。 */
+    static Outcome send(QQBotClient bot, BridgeConfig.Target target, String text) {
         try {
-            bot.api().group().sendGroupMessage(group.groupOpenid(), MessageBuilder.of(text).toGroup());
-            Log.debug("已发往 QQ 群 " + group.label() + "：" + text);
+            if (target.kind() == BridgeConfig.Kind.CHANNEL) {
+                bot.api().channelMessages().sendChannelMessage(target.conversationId(),
+                        MessageBuilder.of(text).toChannel());
+            } else {
+                bot.api().group().sendGroupMessage(target.conversationId(), MessageBuilder.of(text).toGroup());
+            }
+            Log.debug("已发往 " + where(target) + target.label() + "：" + text);
             return new Outcome(true, "已发出");
         } catch (AuditPendingException e) {
-            Log.info("发往 QQ 群 " + group.label() + " 的消息进入人工审核：" + text);
+            Log.info("发往 " + where(target) + target.label() + " 的消息进入人工审核：" + text);
             if (e.auditId() != null) {
                 bot.audits().resultOf(e.auditId(), Duration.ofMinutes(5)).thenAccept(outcome ->
                         Log.info("QQ 审核结论 " + outcome.auditId() + " -> " + outcome.status()));
             }
             return new Outcome(true, "平台收下了，但进了人工审核");
         } catch (ApiException e) {
-            Log.warn("发往 QQ 群 " + group.label() + " 失败 err_code=" + e.errCode() + "：" + e.getMessage()
+            Log.warn("发往 " + where(target) + target.label() + " 失败 err_code=" + e.errCode() + "：" + e.getMessage()
                     + "（内容：" + text + "）");
             return new Outcome(false, "平台拒绝 err_code=" + e.errCode() + "：" + e.getMessage());
         } catch (RuntimeException e) {
-            Log.warn("发往 QQ 群 " + group.label() + " 失败（内容：" + text + "）", e);
+            Log.warn("发往 " + where(target) + target.label() + " 失败（内容：" + text + "）", e);
             return new Outcome(false, e.getClass().getSimpleName() + "：" + e.getMessage());
         }
     }

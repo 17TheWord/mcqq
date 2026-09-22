@@ -50,74 +50,87 @@ public final class QqToMc {
         this.unbound = unbound;
     }
 
-    @On({EventType.GROUP_MESSAGE_CREATE, EventType.GROUP_AT_MESSAGE_CREATE})
+    @On({EventType.GROUP_MESSAGE_CREATE, EventType.GROUP_AT_MESSAGE_CREATE,
+            EventType.MESSAGE_CREATE, EventType.AT_MESSAGE_CREATE})
     public void onGroupMessage(QQMessageEvent message) {
-        Optional<BridgeConfig.Group> bound = group(message);
+        Optional<BridgeConfig.Target> bound = target(message);
         if (bound.isEmpty()) {
             noteUnbound(message.conversationId());
             return;
         }
-        BridgeConfig.Group group = bound.get();
-        if (!group.receivesFromQq()) {
-            Log.debug("群 " + group.label() + " 配成了只出不进，忽略这条消息");
+        BridgeConfig.Target target = bound.get();
+        if (!target.receivesFromQq()) {
+            Log.debug("群 " + target.label() + " 配成了只出不进，忽略这条消息");
             return;
         }
         String content = message.content();
         if (content == null || content.isBlank()) {
-            Log.debug("群 " + group.label() + " 的消息没有文字内容，忽略");
+            Log.debug("群 " + target.label() + " 的消息没有文字内容，忽略");
             return;
         }
         if (!firstSeen("m:" + message.id())) {
-            Log.debug("群 " + group.label() + " 的消息 " + message.id() + " 是平台重推的，忽略");
+            Log.debug("群 " + target.label() + " 的消息 " + message.id() + " 是平台重推的，忽略");
             return;
         }
         String who = message.author() == null || message.author().username == null
                 ? shortId(message.senderId()) : message.author().username;
         Map<String, String> values = new LinkedHashMap<>();
-        values.put("group", group.label());
+        values.put("group", target.label());
         values.put("user", who);
         values.put("text", content.strip());
-        broadcast(group, Templates.QQ_CHAT, values);
+        broadcast(target, Templates.QQ_CHAT, values);
 
         int attachments = message.segments().media().size();
         if (attachments > 0) {
             values.put("count", String.valueOf(attachments));
-            broadcast(group, Templates.QQ_ATTACHMENT, values);
+            broadcast(target, Templates.QQ_ATTACHMENT, values);
         }
     }
 
     /** Who left and who came: the notice names them as its subject, and nobody else is asked about it. */
     @On({EventType.GROUP_MEMBER_ADD, EventType.GROUP_MEMBER_REMOVE})
     public void onGroupMemberChange(QQNoticeEvent notice) {
-        Optional<BridgeConfig.Group> bound = group(notice);
+        Optional<BridgeConfig.Target> bound = target(notice);
         if (bound.isEmpty()) {
             noteUnbound(notice.conversationId());
             return;
         }
-        BridgeConfig.Group group = bound.get();
-        if (!group.receivesFromQq()) {
-            Log.debug("群 " + group.label() + " 配成了只出不进，忽略成员变动");
+        BridgeConfig.Target target = bound.get();
+        if (!target.receivesFromQq()) {
+            Log.debug("群 " + target.label() + " 配成了只出不进，忽略成员变动");
             return;
         }
         if (!firstSeen("n:" + notice.name() + ':' + notice.id())) {
-            Log.debug("群 " + group.label() + " 的成员变动 " + notice.id() + " 是平台重推的，忽略");
+            Log.debug("群 " + target.label() + " 的成员变动 " + notice.id() + " 是平台重推的，忽略");
             return;
         }
         Optional<String> member = notice.subject();
         if (member.isEmpty()) {
-            Log.debug("群 " + group.label() + " 的成员变动没有说是谁，忽略");
+            Log.debug("群 " + target.label() + " 的成员变动没有说是谁，忽略");
             return;
         }
         String key = notice.type() == EventType.GROUP_MEMBER_ADD
                 ? Templates.QQ_MEMBER_ADD : Templates.QQ_MEMBER_REMOVE;
         Map<String, String> values = new LinkedHashMap<>();
-        values.put("group", group.label());
+        values.put("group", target.label());
         values.put("member", shortId(member.get()));
-        broadcast(group, key, values);
+        broadcast(target, key, values);
     }
 
-    private Optional<BridgeConfig.Group> group(QQEvent event) {
-        return config.group(event.conversationId());
+    private Optional<BridgeConfig.Target> target(QQEvent event) {
+        return config.target(conversationId(event));
+    }
+
+    /**
+     * 事件的会话标识：群是 {@code group_openid}，子频道是 {@code channel_id}。
+     *
+     * <p>SDK 的 {@code scene()} 知道每个面该取哪个键（{@code ReplyTarget} 里就是那张表），
+     * 所以先问它；它认不出来时才退回 {@code conversationId()}。
+     */
+    private static String conversationId(QQEvent event) {
+        var scene = event.scene();
+        String id = scene == null ? null : scene.targetId(event);
+        return id == null || id.isBlank() ? event.conversationId() : id;
     }
 
     /**
@@ -141,11 +154,11 @@ public final class QqToMc {
         return seen.putIfAbsent(key, Boolean.TRUE) == null;
     }
 
-    private void broadcast(BridgeConfig.Group group, String templateKey, Map<String, String> values) {
-        String line = Templates.render(config.template(group.groupOpenid(), templateKey),
+    private void broadcast(BridgeConfig.Target target, String templateKey, Map<String, String> values) {
+        String line = Templates.render(config.template(target.conversationId(), templateKey),
                 Templates.withContext(values, platform.label()));
         if (line.isEmpty()) {
-            Log.debug("群 " + group.label() + " 的 " + templateKey + " 模板为空，不播报");
+            Log.debug("群 " + target.label() + " 的 " + templateKey + " 模板为空，不播报");
             return;
         }
         // The console copy carries the colour codes; the platform renders them for the players.

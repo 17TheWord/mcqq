@@ -332,6 +332,104 @@ class BridgeConfigTest {
                 config.problems().toString());
     }
 
+    @Test
+    void readsChannelsAlongsideGroups() throws Exception {
+        BridgeConfig config = read("""
+                bots:
+                  - id: main
+                    app-id: "1"
+                    secret: "abc"
+                    groups:
+                      - group-openid: "G1"
+                        label: 主群
+                    channels:
+                      - guild-id: "GUILD"
+                        channel-id: "CH1"
+                        label: 主频道
+                        send-to-qq: [chat, death]
+                        command:
+                          allow: owner
+                """);
+
+        assertTrue(config.problems().isEmpty(), config.problems().toString());
+        BridgeConfig.Bot bot = config.bots().get(0);
+        assertEquals(1, bot.groups().size());
+        assertEquals(1, bot.channels().size());
+
+        BridgeConfig.Channel channel = bot.channels().get(0);
+        assertEquals("GUILD", channel.guildId());
+        assertEquals("CH1", channel.channelId());
+        assertEquals("主频道", channel.label());
+        assertTrue(channel.receivesFromQq());
+        assertTrue(channel.sendsToQq(BridgeConfig.McEvent.CHAT));
+        assertFalse(channel.sendsToQq(BridgeConfig.McEvent.JOIN), "只订阅了 chat 与 death");
+        assertEquals(BridgeConfig.Kind.CHANNEL, channel.kind());
+        assertEquals(CommandAccess.Allow.OWNER, channel.commandAccess().allow());
+
+        // 群和子频道放在一起时，顺序是先群后频道。
+        assertEquals(List.of("G1", "CH1"), bot.targets().stream()
+                .map(BridgeConfig.Target::conversationId).toList());
+    }
+
+    @Test
+    void aTargetIsFoundByItsOwnKeyWhicheverKindItIs() throws Exception {
+        BridgeConfig config = read("""
+                bots:
+                  - id: main
+                    app-id: "1"
+                    secret: "abc"
+                    groups:
+                      - group-openid: "G1"
+                        label: 主群
+                    channels:
+                      - guild-id: "GUILD"
+                        channel-id: "CH1"
+                        label: 主频道
+                """);
+
+        assertEquals("主群", config.target("G1").orElseThrow().label());
+        assertEquals("主频道", config.target("CH1").orElseThrow().label());
+        assertTrue(config.target("不存在").isEmpty());
+        // 子频道也能按自己的 id 查到模板（群级覆盖那条路对两种目标都成立）。
+        assertEquals("[MC] {player}: {text}", config.template("CH1", "mc-chat"));
+    }
+
+    @Test
+    void aChannelWithoutChannelIdIsSkipped() throws Exception {
+        BridgeConfig config = read("""
+                bots:
+                  - id: main
+                    app-id: "1"
+                    secret: "abc"
+                    channels:
+                      - guild-id: "GUILD"
+                        label: 没有 channel-id
+                """);
+
+        assertTrue(config.bots().get(0).channels().isEmpty());
+        assertTrue(config.problems().stream().anyMatch(p -> p.contains("channel-id")),
+                config.problems().toString());
+    }
+
+    @Test
+    void aChannelWithoutGuildIdIsKeptButMentioned() throws Exception {
+        // guild-id 不参与匹配（匹配只用 channel-id），但少了它在日志和状态里认不出是哪儿 ——
+        // 所以只说一声，不跳过。
+        BridgeConfig config = read("""
+                bots:
+                  - id: main
+                    app-id: "1"
+                    secret: "abc"
+                    channels:
+                      - channel-id: "CH1"
+                        label: 主频道
+                """);
+
+        assertEquals(1, config.bots().get(0).channels().size(), "少了 guild-id 也要留着");
+        assertTrue(config.problems().stream().anyMatch(p -> p.contains("guild-id")),
+                config.problems().toString());
+    }
+
     private static BridgeConfig.Bot bot(BridgeConfig config, String id) {
         return config.bots().stream().filter(b -> b.id().equals(id)).findFirst().orElseThrow();
     }

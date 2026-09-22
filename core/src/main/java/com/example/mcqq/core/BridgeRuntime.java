@@ -78,17 +78,17 @@ public final class BridgeRuntime implements AutoCloseable {
             if (bot == null) {
                 // Every branch that drops an event says so: "why did my message not arrive" has no other
                 // answer, and it is the question an operator actually asks.
-                Log.debug("不转发 " + event + " → 群 " + delivery.group().label()
+                Log.debug("不转发 " + event + " → " + delivery.target().label()
                         + "：bot " + delivery.bot().id() + " 未注册（凭证缺失或启动失败）");
                 continue;
             }
-            Log.debug("转发 " + event + " → 群 " + delivery.group().label() + "：" + delivery.line());
-            dispatcher.execute(() -> QqSender.send(bot, delivery.group(), delivery.line()));
+            Log.debug("转发 " + event + " → " + delivery.target().label() + "：" + delivery.line());
+            dispatcher.execute(() -> QqSender.send(bot, delivery.target(), delivery.line()));
         }
     }
 
-    /** One group and the exact line it would get. */
-    record Delivery(BridgeConfig.Bot bot, BridgeConfig.Group group, String line) {
+    /** One target and the exact line it would get. */
+    record Delivery(BridgeConfig.Bot bot, BridgeConfig.Target target, String line) {
     }
 
     /**
@@ -103,17 +103,17 @@ public final class BridgeRuntime implements AutoCloseable {
         String platformLabel = platform.label();
         List<Delivery> deliveries = new ArrayList<>();
         for (BridgeConfig.Bot botConfig : config.bots()) {
-            for (BridgeConfig.Group group : botConfig.groups()) {
-                if (!group.sendsToQq(event)) {
-                    Log.debug("不转发 " + event + " → 群 " + group.label() + "：该群没订阅这个事件");
+            for (BridgeConfig.Target target : botConfig.targets()) {
+                if (!target.sendsToQq(event)) {
+                    Log.debug("不转发 " + event + " → " + target.label() + "：它没订阅这个事件");
                     continue;
                 }
-                String line = plain(config.template(group.groupOpenid(), key), values, platformLabel);
+                String line = plain(config.template(target.conversationId(), key), values, platformLabel);
                 if (line.isEmpty()) {
-                    Log.debug("不转发 " + event + " → 群 " + group.label() + "：模板为空（= 静音）");
+                    Log.debug("不转发 " + event + " → " + target.label() + "：模板为空（= 静音）");
                     continue;
                 }
-                deliveries.add(new Delivery(botConfig, group, line));
+                deliveries.add(new Delivery(botConfig, target, line));
             }
         }
         return deliveries;
@@ -171,7 +171,7 @@ public final class BridgeRuntime implements AutoCloseable {
         bot.handlers().register(new QqToMc(platform, config, botConfig.id(), unbound));
         bots.register(bot);
         registered.add(bot);
-        Log.info("已接入 bot " + botConfig.id() + "，绑了 " + botConfig.groups().size() + " 个群");
+        Log.info("已接入 bot " + botConfig.id() + "，绑了 " + botConfig.targets().size() + " 个目标（群 + 子频道）");
     }
 
     private void connectAll() {
@@ -205,11 +205,11 @@ public final class BridgeRuntime implements AutoCloseable {
                 lines.add("bot " + botConfig.id() + "：未注册（凭证缺失或启动失败），跳过");
                 continue;
             }
-            for (BridgeConfig.Group group : botConfig.groups()) {
-                lines.add("bot " + botConfig.id() + " → 群 " + group.label() + "：已排队，结果见服务端日志");
+            for (BridgeConfig.Target target : botConfig.targets()) {
+                lines.add("bot " + botConfig.id() + " → " + target.label() + "：已排队，结果见服务端日志");
                 dispatcher.execute(() -> {
-                    QqSender.Outcome outcome = QqSender.send(bot, group, text);
-                    Log.info("测试消息 → 群 " + group.label() + "：" + outcome.note());
+                    QqSender.Outcome outcome = QqSender.send(bot, target, text);
+                    Log.info("测试消息 → " + target.label() + "：" + outcome.note());
                 });
             }
         }
@@ -232,16 +232,16 @@ public final class BridgeRuntime implements AutoCloseable {
             QQBotClient bot = bots.get(botConfig.appId()).orElse(null);
             String state = bot == null ? "未注册" : bot.isOnline() ? "在线" : connecting ? "连接中" : "未连接";
             String self = bot == null || bot.selfId() == null ? "" : " id=" + bot.selfId();
-            lines.add("bot " + botConfig.id() + " [" + state + self + "] 群：" + groupSummary(botConfig));
+            lines.add("bot " + botConfig.id() + " [" + state + self + "] 目标：" + targetSummary(botConfig));
         }
         // 命令执行是"从 QQ 能影响服务器"的那条线，所以状态里必须能一眼看到它开着没有、谁能用。
         if (config.commandsEnabled()) {
             lines.add("命令执行：开着，命令头 " + config.commandPrefix());
             for (BridgeConfig.Bot botConfig : config.bots()) {
-                for (BridgeConfig.Group group : botConfig.groups()) {
-                    String access = group.commandAccess().describe();
+                for (BridgeConfig.Target target : botConfig.targets()) {
+                    String access = target.commandAccess().describe();
                     if (access != null) {
-                        lines.add("  " + group.label() + "：" + access);
+                        lines.add("  " + target.label() + "：" + access);
                     }
                 }
             }
@@ -256,12 +256,12 @@ public final class BridgeRuntime implements AutoCloseable {
         return lines;
     }
 
-    private static String groupSummary(BridgeConfig.Bot botConfig) {
-        List<String> groups = new ArrayList<>();
-        for (BridgeConfig.Group group : botConfig.groups()) {
-            groups.add(group.label() + "(收=" + group.receivesFromQq() + ", 发=" + group.sendEvents() + ")");
+    private static String targetSummary(BridgeConfig.Bot botConfig) {
+        List<String> targets = new ArrayList<>();
+        for (BridgeConfig.Target target : botConfig.targets()) {
+            targets.add(target.label() + "(收=" + target.receivesFromQq() + ", 发=" + target.sendEvents() + ")");
         }
-        return groups.toString();
+        return targets.toString();
     }
 
     @Override

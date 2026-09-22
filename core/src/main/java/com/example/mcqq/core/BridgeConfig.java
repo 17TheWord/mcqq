@@ -58,7 +58,7 @@ public final class BridgeConfig {
     }
 
     /** One QQ group: where it is bridged and, per direction, what is allowed in it. */
-    public static final class Group {
+    public static final class Group implements Target {
 
         private final String groupOpenid;
         private final String label;
@@ -83,15 +83,28 @@ public final class BridgeConfig {
             return groupOpenid;
         }
 
+        @Override
+        public String conversationId() {
+            return groupOpenid;
+        }
+
+        @Override
+        public Kind kind() {
+            return Kind.GROUP;
+        }
+
         /** Name used in chat lines and {@code /qq status}; falls back to the openid. */
+        @Override
         public String label() {
             return label.isBlank() ? groupOpenid : label;
         }
 
+        @Override
         public boolean receivesFromQq() {
             return receiveFromQq;
         }
 
+        @Override
         public boolean sendsToQq(McEvent event) {
             return sendToQq.contains(event);
         }
@@ -102,11 +115,13 @@ public final class BridgeConfig {
         }
 
         /** The templates this group overrides; empty means it uses the global ones. */
+        @Override
         public Map<String, String> templates() {
             return templates;
         }
 
         /** 这个群里谁能执行命令。 */
+        @Override
         public CommandAccess commandAccess() {
             return commandAccess;
         }
@@ -118,6 +133,125 @@ public final class BridgeConfig {
         }
     }
 
+    /** 出站时走哪个接口。群和子频道的发送方式不同，桥接逻辑一样。 */
+    public enum Kind {
+        GROUP,
+        CHANNEL
+    }
+
+    /**
+     * 一个可以双向桥接的目标：群，或者频道的文字子频道。
+     *
+     * <p>两者的**键**和**发送方式**都不同（群是 {@code group-openid}，子频道是 {@code guild-id} +
+     * {@code channel-id}），但桥接逻辑一模一样 —— 匹配入站消息、套模板、按事件过滤、判权限。
+     * 所以那些逻辑写在这个接口上，只有"怎么发"和"键从哪来"分叉。
+     */
+    public interface Target {
+
+        /** 会话标识，入站事件按它匹配：群是 group-openid，子频道是 channel-id。 */
+        String conversationId();
+
+        /** 出站走哪个接口。 */
+        Kind kind();
+
+        /** 出现在聊天行与 {@code /qq status} 里的名字；没填就退回 id。 */
+        String label();
+
+        boolean receivesFromQq();
+
+        boolean sendsToQq(McEvent event);
+
+        /** 这个目标订阅了哪些 MC 事件，给 {@code /qq status} 用。 */
+        Set<McEvent> sendEvents();
+
+        /** 这个目标覆盖的模板；空表示用全局的。 */
+        Map<String, String> templates();
+
+        /** 谁能在这里执行命令。 */
+        CommandAccess commandAccess();
+    }
+
+    /**
+     * 频道的一个文字子频道。
+     *
+     * <p>寻址要**两个**字段（{@code guild-id} + {@code channel-id}），所以它没法塞进 {@code groups:}
+     * 那个列表 —— 那样一半字段会空着，而 {@code groups:} 这个名字也就变成假的了。
+     */
+    public static final class Channel implements Target {
+
+        private final String guildId;
+        private final String channelId;
+        private final String label;
+        private final boolean receiveFromQq;
+        private final Set<McEvent> sendToQq;
+        private final Map<String, String> templates;
+        private final CommandAccess commandAccess;
+
+        Channel(String guildId, String channelId, String label, boolean receiveFromQq,
+                Set<McEvent> sendToQq, Map<String, String> templates, CommandAccess commandAccess) {
+            this.guildId = guildId;
+            this.channelId = channelId;
+            this.label = label;
+            this.receiveFromQq = receiveFromQq;
+            this.sendToQq = Collections.unmodifiableSet(new LinkedHashSet<>(sendToQq));
+            this.templates = Collections.unmodifiableMap(new LinkedHashMap<>(templates));
+            this.commandAccess = commandAccess;
+        }
+
+        public String guildId() {
+            return guildId;
+        }
+
+        public String channelId() {
+            return channelId;
+        }
+
+        @Override
+        public String conversationId() {
+            return channelId;
+        }
+
+        @Override
+        public Kind kind() {
+            return Kind.CHANNEL;
+        }
+
+        @Override
+        public String label() {
+            return label.isBlank() ? channelId : label;
+        }
+
+        @Override
+        public boolean receivesFromQq() {
+            return receiveFromQq;
+        }
+
+        @Override
+        public boolean sendsToQq(McEvent event) {
+            return sendToQq.contains(event);
+        }
+
+        /** What this channel receives from Minecraft, for {@code /qq status}. */
+        public Set<McEvent> sendEvents() {
+            return sendToQq;
+        }
+
+        @Override
+        public Map<String, String> templates() {
+            return templates;
+        }
+
+        @Override
+        public CommandAccess commandAccess() {
+            return commandAccess;
+        }
+
+        @Override
+        public String toString() {
+            return "Channel{" + guildId + '/' + channelId + " label=" + label + '}';
+        }
+    }
+
     /** One QQ bot account and the groups it bridges. */
     public static final class Bot {
 
@@ -126,8 +260,10 @@ public final class BridgeConfig {
         private final String secret;
         private final String secretEnvironmentVariable;
         private final Map<String, Group> groups;
+        private final Map<String, Channel> channels;
 
-        Bot(String id, String appId, String secret, String secretEnvironmentVariable, Map<String, Group> groups) {
+        Bot(String id, String appId, String secret, String secretEnvironmentVariable, Map<String, Group> groups,
+                Map<String, Channel> channels) {
             this.id = id;
             this.appId = appId;
             this.secret = secret;
@@ -135,6 +271,7 @@ public final class BridgeConfig {
             // Copy, but keep the file's order: Map.copyOf would shuffle the groups in /qq status and in the
             // forward loop.
             this.groups = Collections.unmodifiableMap(new LinkedHashMap<>(groups));
+            this.channels = Collections.unmodifiableMap(new LinkedHashMap<>(channels));
         }
 
         public String id() {
@@ -161,6 +298,27 @@ public final class BridgeConfig {
 
         public Optional<Group> group(String groupOpenid) {
             return Optional.ofNullable(groups.get(groupOpenid));
+        }
+
+        public List<Channel> channels() {
+            return List.copyOf(channels.values());
+        }
+
+        public Optional<Channel> channel(String channelId) {
+            return Optional.ofNullable(channels.get(channelId));
+        }
+
+        /** 群和子频道放在一起，顺序是"先群后频道" —— 出站与状态都按这个顺序走。 */
+        public List<Target> targets() {
+            List<Target> all = new ArrayList<>(groups.values());
+            all.addAll(channels.values());
+            return List.copyOf(all);
+        }
+
+        /** 按会话标识找一个目标：群看 group-openid，子频道看 channel-id。 */
+        public Optional<Target> target(String conversationId) {
+            Optional<Group> group = group(conversationId);
+            return group.isPresent() ? Optional.of(group.get()) : channel(conversationId).map(c -> c);
         }
 
         @Override
@@ -223,10 +381,10 @@ public final class BridgeConfig {
      * The template in force for one key and one group: the group's override if it wrote one, else the global
      * one from the file, else the built-in default. That is the whole precedence rule, in one place.
      */
-    public String template(String groupOpenid, String key) {
-        Optional<Group> group = group(groupOpenid);
-        if (group.isPresent()) {
-            String override = group.get().templates().get(key);
+    public String template(String conversationId, String key) {
+        Optional<Target> target = target(conversationId);
+        if (target.isPresent()) {
+            String override = target.get().templates().get(key);
             if (override != null) {
                 return override;
             }
@@ -244,6 +402,17 @@ public final class BridgeConfig {
     public Optional<Group> group(String groupOpenid) {
         for (Bot bot : bots.values()) {
             Optional<Group> found = bot.group(groupOpenid);
+            if (found.isPresent()) {
+                return found;
+            }
+        }
+        return Optional.empty();
+    }
+
+    /** 按会话标识找一个目标，群和子频道都认。入站消息用这个。 */
+    public Optional<Target> target(String conversationId) {
+        for (Bot bot : bots.values()) {
+            Optional<Target> found = bot.target(conversationId);
             if (found.isPresent()) {
                 return found;
             }
@@ -511,7 +680,8 @@ public final class BridgeConfig {
                 problems.add("bot " + id + ": secret 与 secret-env 都填了，用 secret"
                         + "（要改用环境变量就把 secret 删掉）");
             }
-            bots.put(key, new Bot(id, appId, secret, orDefault(secretEnv, "QQ_BOT_SECRET"), groups));
+            bots.put(key, new Bot(id, appId, secret, orDefault(secretEnv, "QQ_BOT_SECRET"), groups,
+                    channels(botMap.get("channels"), id, problems)));
         }
         // "开着但谁都执行不了"是最容易发生的误会，所以在这里就说出来。
         if (commandsEnabled(root) && bots.values().stream()
@@ -522,6 +692,66 @@ public final class BridgeConfig {
         }
         return new BridgeConfig(bots, templates, truthy(root.get("debug")),
                 commandsEnabled(root), commandPrefix(root, problems), problems);
+    }
+
+    /**
+     * 读一个 bot 的 {@code channels:} 列表。
+     *
+     * <p>和 {@code groups:} 是两套键：子频道的寻址是 {@code guild-id} + {@code channel-id} 两个字段。
+     * 其余（{@code label} / {@code receive-from-qq} / {@code send-to-qq} / {@code templates} /
+     * {@code command}）语义完全一样。
+     */
+    private static Map<String, Channel> channels(Object configured, String botId, List<String> problems) {
+        Map<String, Channel> channels = new LinkedHashMap<>();
+        if (configured == null) {
+            return channels;
+        }
+        if (!(configured instanceof List)) {
+            problems.add("bot " + botId + " 的 'channels:' 不是列表，已忽略");
+            return channels;
+        }
+        for (Object entry : (List<Object>) configured) {
+            if (!(entry instanceof Map)) {
+                problems.add("bot " + botId + " 的 'channels:' 里有一项不是键值对，已忽略");
+                continue;
+            }
+            Map<String, Object> channelMap = (Map<String, Object>) entry;
+            String channelId = text(channelMap.get("channel-id"));
+            if (channelId.isEmpty()) {
+                problems.add("bot " + botId + " 有个子频道没写 channel-id，已跳过");
+                continue;
+            }
+            if (channelId.contains(PLACEHOLDER)) {
+                problems.add("bot " + botId + " 的 channel-id 还是模板里的 " + PLACEHOLDER + "，已跳过");
+                continue;
+            }
+            String guildId = text(channelMap.get("guild-id"));
+            if (guildId.isEmpty()) {
+                // 匹配只用 channel-id，但 guild-id 是"这个子频道属于哪个频道"的唯一凭据 ——
+                // 少了它在日志和状态里都认不出是哪儿，所以只说一声，不跳过。
+                problems.add("bot " + botId + " 的子频道 " + channelId + " 没写 guild-id"
+                        + "（只影响日志与状态里怎么称呼它，不影响桥接）");
+            }
+            Set<McEvent> send = new LinkedHashSet<>();
+            Object sendTo = channelMap.get("send-to-qq");
+            if (sendTo instanceof List) {
+                for (Object name : (List<Object>) sendTo) {
+                    Optional<McEvent> event = McEvent.parse(text(name));
+                    if (event.isPresent()) {
+                        send.add(event.get());
+                    } else {
+                        problems.add("子频道 " + channelId + " 订阅了未知的事件 '" + text(name) + "'，已忽略");
+                    }
+                }
+            } else if (sendTo == null) {
+                send.addAll(List.of(McEvent.CHAT, McEvent.JOIN, McEvent.QUIT, McEvent.DEATH));
+            }
+            channels.put(channelId, new Channel(guildId, channelId, text(channelMap.get("label")),
+                    channelMap.get("receive-from-qq") == null || truthy(channelMap.get("receive-from-qq")),
+                    send, templates(channelMap.get("templates"), "子频道 " + channelId, problems),
+                    commandAccess(channelMap.get("command"), "子频道 " + channelId, problems)));
+        }
+        return channels;
     }
 
     /**

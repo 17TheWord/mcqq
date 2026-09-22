@@ -49,9 +49,9 @@ public final class TemplatesCommand extends SubCommand {
             lines.add(key + " = " + config.globalTemplate(key));
         }
         for (BridgeConfig.Bot bot : config.bots()) {
-            for (BridgeConfig.Group group : bot.groups()) {
-                if (!group.templates().isEmpty()) {
-                    lines.add("群 " + group.label() + " 覆盖了：" + String.join(", ", group.templates().keySet()));
+            for (BridgeConfig.Target target : bot.targets()) {
+                if (!target.templates().isEmpty()) {
+                    lines.add(target.label() + " 覆盖了：" + String.join(", ", target.templates().keySet()));
                 }
             }
         }

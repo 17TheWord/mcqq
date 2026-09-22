@@ -81,7 +81,7 @@ class ForwardPlanTest {
                 Templates.values("player", "Alice", "text", "hi"));
 
         assertEquals(1, deliveries.size(), deliveries.toString());
-        assertEquals("订阅了", deliveries.get(0).group().label());
+        assertEquals("订阅了", deliveries.get(0).target().label());
     }
 
     @Test
@@ -207,7 +207,7 @@ class ForwardPlanTest {
                 Templates.values("player", "Alice", "text", "hi"));
 
         assertEquals(List.of("G1", "G2", "G3"),
-                deliveries.stream().map(delivery -> delivery.group().groupOpenid()).toList());
+                deliveries.stream().map(delivery -> delivery.target().conversationId()).toList());
         assertEquals(List.of("1", "1", "2"),
                 deliveries.stream().map(delivery -> delivery.bot().appId()).toList(),
                 "each delivery carries the bot that owns the group");
