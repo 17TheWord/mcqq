@@ -11,8 +11,8 @@ QQ 侧走 [qqbot-java-sdk](https://github.com/skiesworld/qqbot-java-sdk) 0.0.4 �
 | 文件 | 是什么 |
 | --- | --- |
 | [docs/VERSIONS.md](docs/VERSIONS.md) | **加一个新 MC 版本要做什么**：三种情况、具体步骤、什么时候才需要加"版本窗口"子项目。 |
-| [docs/MULTIPLATFORM.md](docs/MULTIPLATFORM.md) | 为什么是这个形状：平台/版本矩阵的调研、路线取舍、每条结论的证据。 |
-| [docs/TEMPLATES.md](docs/TEMPLATES.md) | 消息模板与占位符的设计（含第三方占位符库的评估）。 |
+| [docs/MULTIPLATFORM.md](docs/MULTIPLATFORM.md) | 每个平台的构建事实、结构，以及加平台/加版本时要知道的坑。 |
+| [docs/TEMPLATES.md](docs/TEMPLATES.md) | 消息模板、占位符与配置层级；含第三方占位符库怎么接。 |
 | [THIRD-PARTY.md](THIRD-PARTY.md) | 打包进去的第三方组件与许可证。 |
 | [LICENSE](LICENSE) | MIT。 |
 
@@ -38,7 +38,7 @@ paper/paper-26.1/              Paper 变体：入口、新聊天事件（AsyncCh
 **`forge/forge-1.20.1` 为什么不用独立构建**：1.20.1 的 ForgeGradle 是第 6 代（要 Gradle 8），26.1 的是第 7 代
 （要 Gradle 9.3+），而同一个 plugin id 在一个构建里只能有一个版本。但 ModDevGradle 的
 `net.neoforged.moddev.legacyforge` 是**同一个 artifact** 的 addon、与 `net.neoforged.moddev` 同版本，
-所以这一代就待在这个构建里。依据与实测记录见 [docs/MULTIPLATFORM.md](docs/MULTIPLATFORM.md) §8.6。
+所以这一代就待在这个构建里。依据见 [docs/MULTIPLATFORM.md](docs/MULTIPLATFORM.md) 第六节。
 ⚠️ 它的验证方式与别的平台不同（dev run 看不见兄弟项目的 classes 目录，见那份文档"六"）。
 
 **Bukkit 一族装哪个**：Paper 系（含 Purpur，以及 **Folia**）装 `paper` 那份；Spigot / CraftBukkit 装 `spigot` 那份。
@@ -231,7 +231,7 @@ templates:
 
 * 我们自己的占位符用 `{花括号}`。第三方占位符库（mod 侧 Patbox 的 Text Placeholder API、Bukkit 侧
   HelpChat 的 PlaceholderAPI）都用 `%百分号%`，所以两者不会打架 —— **但目前 `%...%` 原样显示**，
-  要接它们需要平台侧实现一个钩子，见 [TEMPLATES.md](docs/TEMPLATES.md) 第五节。
+  要接它们需要平台侧实现一个钩子，见 [TEMPLATES.md](docs/TEMPLATES.md) 第三节。
 
 ## 发布（维护者）
 

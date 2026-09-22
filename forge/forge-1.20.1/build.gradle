@@ -4,7 +4,7 @@
 // 为什么这不是一套独立的构建：1.20.1 的 ForgeGradle 是第 6 代（要 Gradle 8），26.1 的是第 7 代（要 Gradle 9.3+），
 // 而同一个 plugin id 在一个构建里只能有一个版本。ModDevGradle 的 `legacyforge` 是**同一个 artifact** 的 addon、
 // 与上面 NeoForge 模块用的 `net.neoforged.moddev` 同版本，所以这个窗口就待在这个构建里。
-// 依据与验证记录见 docs/MULTIPLATFORM.md §8.6。
+// 依据见 docs/MULTIPLATFORM.md 第六节。
 plugins {
     id 'java'
     id 'net.neoforged.moddev.legacyforge'
