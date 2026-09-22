@@ -82,6 +82,10 @@ public final class QqToMc {
                     + " bot=" + mentioned.bot + " username=" + mentioned.username);
         }
         Log.debug("  mentionedBot()=" + message.mentionedBot());
+        // 被动回复要的是 d.id，而 SDK 的 event.id() 是信封的 id —— 两个到底一不一样，只有真机知道。
+        com.google.gson.JsonElement inner = message.rawObject().get("id");
+        Log.debug("  信封 id（SDK 的 event.id()）=" + message.id()
+                + "  d.id=" + (inner == null ? "(没有)" : inner.getAsString()));
         if (!target.receivesFromQq()) {
             Log.debug("群 " + target.label() + " 配成了只出不进，忽略这条消息");
             return;
