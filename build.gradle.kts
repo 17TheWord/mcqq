@@ -39,6 +39,9 @@ subprojects {
     group = property("maven_group").toString()
     version = property("mod_version").toString()
     repositories {
+        // 放在最前面：要试一个**还没上 Central** 的 SDK 版本时，用 publishToMavenLocal 装的那份。
+        // 平时的版本照样从 Central 拉 —— 本地没有就不影响。
+        mavenLocal()
         mavenCentral()
         maven("https://maven.fabricmc.net/") { name = "Fabric" }
     }

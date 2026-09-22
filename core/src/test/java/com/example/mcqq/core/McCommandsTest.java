@@ -214,11 +214,14 @@ class McCommandsTest {
     void anAtMentionBeforeTheCommandIsStripped() throws Exception {
         // 真机上就是这个把命令吞了：@机器人 /mcc list 的正文带着 <@openid> 前缀，
         // 前缀判断不成立 → 被当普通消息转发进聊天栏，命令完全没跑。
+        // 现在剥它的是 SDK 的 content()（按 mentions 认领的 id 剥），所以这里要把 mentions 一起造出来。
         try (FakeRcon rcon = new FakeRcon("hunter2", OUTPUT)) {
             McCommands commands = commands(config(rcon));
 
-            assertTrue(commands.handle(groupMessage("BOSS", "admin",
-                    "<@D602A5A6CCFA90A8EE4851D2512E43D1> /mcc list")));
+            assertTrue(commands.handle(event(EventType.GROUP_AT_MESSAGE_CREATE, """
+                    {"group_openid":"G1","content":"<@D602A5A6CCFA90A8EE4851D2512E43D1> /mcc list",
+                     "mentions":[{"id":"D602A5A6CCFA90A8EE4851D2512E43D1","bot":true}],
+                     "author":{"member_openid":"BOSS","member_role":"admin"}}""")));
 
             assertEquals(List.of(OUTPUT), replies, "@ 标记要先剥掉，否则命令永远不生效");
             assertEquals("list", rcon.lastCommand());

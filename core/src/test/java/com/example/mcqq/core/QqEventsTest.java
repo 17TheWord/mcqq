@@ -57,18 +57,6 @@ class QqEventsTest {
     }
 
     @Test
-    void stripsTheAtMentionQqPutsInTheText() {
-        // 真机上抓到的原文：@机器人 /mcc list 收到的正文就是这一串。
-        assertEquals("/mcc list",
-                QqEvents.stripLeadingMentions("<@D602A5A6CCFA90A8EE4851D2512E43D1> /mcc list"));
-        assertEquals("大家好", QqEvents.stripLeadingMentions("大家好"), "没有 @ 就不动它");
-        assertEquals("", QqEvents.stripLeadingMentions("<@ABC>"));
-        assertEquals("说 <@ABC> 干嘛", QqEvents.stripLeadingMentions("说 <@ABC> 干嘛"),
-                "只剥开头的，正文中间的不动");
-        assertEquals("<@没闭合", QqEvents.stripLeadingMentions("<@没闭合"), "没闭合就别乱切");
-    }
-
-    @Test
     void theGuildIdComesFromTheEventAndIsEmptyElsewhere() {
         assertEquals("GUILD", QqEvents.guildId(channelMessage("U1", "[\"1\"]")),
                 "绑子频道时要把 guild-id 一起写进配置，所以它得读得出来");

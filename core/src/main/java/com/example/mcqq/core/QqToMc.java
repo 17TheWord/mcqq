@@ -86,9 +86,9 @@ public final class QqToMc {
             Log.debug("群 " + target.label() + " 配成了只出不进，忽略这条消息");
             return;
         }
-        // @ 标记（<@openid>）在 MC 里没有意义，转发前剥掉。
-        String content = QqEvents.stripLeadingMentions(message.content() == null ? "" : message.content());
-        if (content.isBlank()) {
+        // content() 里 @ 标记已经由 SDK 剥掉了（<@openid> 在 MC 里没有意义）。
+        String content = message.content();
+        if (content == null || content.isBlank()) {
             Log.debug("群 " + target.label() + " 的消息没有文字内容，忽略");
             return;
         }

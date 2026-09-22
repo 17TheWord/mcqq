@@ -41,8 +41,8 @@ final class McCommands {
             return false;
         }
         String prefix = config.commandPrefix();
-        String text = QqEvents.stripLeadingMentions(
-                message.content() == null ? "" : message.content());
+        // SDK 0.0.5 起 content() 自己会剥掉 @ 标记（真机实测平台不一定剥），这里直接用。
+        String text = message.content() == null ? "" : message.content().strip();
         if (prefix.isEmpty() || !text.startsWith(prefix)) {
             return false;
         }
