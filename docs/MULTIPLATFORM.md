@@ -15,9 +15,9 @@ Bukkit 一族本来就不碰映射。所以对 mc-qq 来说，「多平台」的
 core 用 release 17 同时服务两代。**不用效仿鹊桥的"每版本一个工程"** —— 那是三代工具链逼出来的，
 见第八、九节。
 
-> ⚠️ **2026-09-21 复核修正**：`core` 现在**不是** release 17，而是 `core_java_release=21`，
-> 而且降到 17 会**编译失败**（`BridgeRuntime` 用了虚拟线程，那是 Java 21 API）。
-> 本文所有"core release 17"的说法都应读作**目标**而非现状。详见 **§8.6**。
+> ✅ **2026-09-22 更新**：`core` 现在**真的是** release 17 了（`BridgeRuntime` 的虚拟线程换成了缓存线程池）。
+> 在那之前它停在 21 而且降不下来，而本文好几处已经按 17 写了 —— 那段"文档写 17、实际 21"的经过记在
+> **§8.6**，留着当样本。
 
 **本轮的方向（第十节）**：先只做 26.x 一个窗口。实测 26.x 已占 35% 的服务器（样本 46,904 台），
 且 26.2 的服务器比 26.1.2 多一倍多 —— 所以是"一个窗口 + 描述符写范围"，不是"锁一个版本"。
@@ -318,8 +318,8 @@ D：[MC 服务器] 装 QueQiao 的 jar（别人维护的平台矩阵）+ 一段 
 ### 8.1 Java 轴：不付代价
 
 MC 的 Java 分档是 **17**（1.18–1.20.4）、**21**（1.20.5–1.21.x）、**25**（26.x）。
-SDK 是 `--release 17`，所以 **core 只要停在 release 17 就同时服务 1.20.1 和 26.x** ——
-但 core 现在停在 **21**（虚拟线程，见 §8.6），所以这个"便宜点"要先付一次清理才拿得到。
+SDK 是 `--release 17`，所以 **core 停在 release 17 就同时服务 1.20.1 和 26.x**。
+（2026-09-22 之前 core 停在 21，因为 dispatcher 用了虚拟线程；那次清理见 §8.6。）
 只有要下到 1.16.5 及更老（Java 8）才需要把 core 降到 8 —— 这正是 QueQiaoTool 停在 Java 8 的原因。
 **这是路线 A 相对路线 B 的一个便宜点**：跨 Java 大版本这条最贵的轴，在 1.20.1 这个目标上根本不存在。
 
@@ -386,38 +386,71 @@ legacy/                      独立构建（自己的 wrapper，Gradle 8.8 + For
 1.21.x 也照这个判据逐项过一遍（NeoForge 1.21.1 用 ModDevGradle，Forge 1.21 那一代要先看 MDK）。
 
 **所以对"要不要降"这件事的答案是**：降的成本主要不在代码（~~1.20.1 的 adapter 差异只有 PROGRESS 记的那两处改名~~
-—— **这句低估了，实测见 §8.6**），而在**多一套老工具链的构建隔离**。而这个成本是可以按平台分批付的 ——
+—— **这句低估了，实测见 §8.6**），而在**多一套老工具链的构建隔离**。
+⚠️ **这一条后来也被 §8.6 推翻了**：1.20.1 的 Forge 有 ModDevGradle 那条与主构建同 artifact 的路，
+`legacy/` 大概率不用建。而这个成本本来就可以按平台分批付的 ——
 **先只加 bukkit 的 1.20.1 覆盖**（一个 jar，零额外工具链），就能把 1.20.1 这个最有人用的低版本吃掉大半，
 Fabric/Forge 的 1.20.1 留到真有需求时再付。
 
-### 8.6 forge-1.20.1 复核：怎么做、好不好做（2026-09-21 实测）
+### 8.6 forge-1.20.1 复核（2026-09-22 实测；结论当天被自己推翻过一次）
 
-**问题**：给 Forge 加一个 1.20.1 窗口要怎么做、好不好做。结论：**结构上一步（照抄现成模式），
-代码上两步（一步在 core、一步在适配器）**；8.5 有两处低估，下面逐条修正。
+**问题**：给 Forge 加一个 1.20.1 窗口要怎么做、好不好做。
 
-#### 一、代际差 → "必须独立构建"（已核实，无争议）
+* **第一版结论**（当天早些时候）：代际差太大 → 必须建 `legacy/` 独立构建。
+* **修正后的结论**：**大概率不用建 legacy**。1.20.1 的 Forge 有一条官方支持的、跟主构建**同 artifact
+  同版本**的路（`net.neoforged.moddev.legacyforge`）。真正要付的钱只有两笔：**core 降 17**（已做）
+  和**适配器换事件模型**。
 
-| | 1.20.1 官方 MDK | 本项目现状 |
+第一版留着（见"一"），因为它记的代际事实仍然有用，判据也仍然是"下载目标版本的官方 MDK，看两行"。
+
+#### 一、代际差是真实的，但它**不再**决定"必须独立构建"
+
+| | 1.20.1 官方 MDK（ForgeGradle 那份） | 本项目现状 |
 | --- | --- | --- |
 | Gradle | **8.8** | 9.7.1 |
 | ForgeGradle | `[6.0,6.2)` | `[7.0.17,8)` |
 | Java | **17** | 25 |
 | Forge | 47.4.23 | 26.1.2-64.1.3 |
 
-三条硬约束，任一条都足以否决"并进主构建"：
+**如果只有 ForgeGradle 一条路**，"独立构建"是硬结论，理由两条：
 
 1. **同一个 plugin id 不能有两个版本** —— `net.minecraftforge.gradle` 在一个 build 里只能是一个，
    FG 6 与 FG 7 不可能共存。
 2. **FG 7 强制 Gradle ≥ 9.3.0** —— 依据是 ForgeGradle 仓库 `FG_7.0` 分支的 commit
    *"Bump minimum Gradle to 9.3.0"*（原文理由：Gradle 9.3.0 含未包含在 rc 里的重要安全修复）。
-   1.20.1 那一代对应 Gradle 8.8。
-3. 工具链不同代：1.20.1 → Java 17，26.x → Java 25。
 
-→ 与 8.5 一致：`legacy/` 独立构建、自己的 wrapper。
+但"用 FG 6 编 1.20.1"只是**一个**前提，而这个前提不必成立 —— 见下。
 
-#### 二、8.5 低估之一：core 现在编不过 17（**这是真门槛**）
+#### 二、推翻第一版的证据：`net.neoforged.moddev.legacyforge`
 
-8.5 / 9.3 都写"core release 17"，但 `gradle.properties:70` 是 `core_java_release=21`。实测：
+1. 官方 MDK 仓库 **`NeoForgeMDKs/MDK-Forge-1.20.1-ModDevGradle`** 用的是
+   `id 'net.neoforged.moddev.legacyforge' version '2.0.91'`。
+2. ModDevGradle 官方文档（`LEGACY.md`）原文：legacyforge 是
+   *"released alongside the normal plugin with **the same version**"*，支持
+   *"MinecraftForge and Vanilla Minecraft versions **1.17 up to 1.20.1**"*，并且是
+   *"an 'addon' plugin, meaning it operates on top of the normal plugin"*。
+3. **本地实证**：把缓存里的 `moddev-gradle-2.0.147.jar` 解开看 `META-INF/gradle-plugins/`，它**同时**提供
+
+   ```
+   net.neoforged.moddev              → ModDevPlugin           （neoforge-26.1 正在用）
+   net.neoforged.moddev.legacyforge  → LegacyForgeModDevPlugin（给 Forge ≤ 1.20.1）
+   ```
+
+   同一个 artifact、同一个版本 → **不存在"同一 plugin id 两个版本"的冲突**。
+
+→ `forge/forge-1.20.1` 可以就是主构建里的一个子项目，与 `neoforge-26.1` 共用 moddev-gradle 2.0.147。
+
+**还没验的三条**（都是"跑一次 build 就知道"，比建一套 legacy 便宜得多）：
+
+1. legacyforge 在 **Gradle 9.7.1** 上能不能跑 —— MDK 给的是 Gradle 8.14.5。主构建已在 9.7.1 上跑
+   `net.neoforged.moddev`，但 legacy 那条路径干的活不同（mavenizer + SRG reobf）。
+2. 它跟 **FG 7 同构建共存**有没有摩擦 —— `forge-26.1` 用 FG7，两家各带一个 mavenizer。
+3. **SRG 重混淆**：1.20.1 的产物必须 reobf 到 SRG 才能在正式服跑。官方文档给的接法是
+   `obfuscation { reobfuscate(tasks.named('shadowJar'), sourceSets.main) }` —— 我们发的正是 shadowJar。
+
+#### 三、core 现在编不过 17（**这条是真的，已修**）
+
+8.5 / 9.3 都写"core release 17"，但当时 `gradle.properties` 是 `core_java_release=21`。实测：
 
 ```
 $ ./gradlew :core:build -Pcore_java_release=17
@@ -425,17 +458,20 @@ D:\...\core\BridgeRuntime.java:43: 错误: 找不到符号
         this.dispatcher = Executors.newVirtualThreadPerTaskExecutor();
 ```
 
-**虚拟线程是 Java 21 API**，全仓 grep 确认 core 只有这一处用到 21 专属 API。
-1.20.1 跑在 Java 17 上 → Java 21 字节码会直接 `UnsupportedClassVersionError`。
-所以**支持 1.20.1 的前置动作是动 core**，三个选择（架构决定，不是实现细节）：
+**虚拟线程是 Java 21 API**，全仓 grep 确认 core 只有这一处用到 21 专属 API。1.20.1 跑在 Java 17 上
+→ Java 21 字节码会直接 `UnsupportedClassVersionError`。所以这是**任何 1.20.1 路线（Forge 也好、
+Bukkit 也好）都要先付的钱**，不是 forge 专属成本。
 
-* **换掉虚拟线程**（`newCachedThreadPool` 之类）—— core 回到 17，全平台一致；代价是失去虚拟线程。
-  在本项目里虚拟线程的收益只是"任务很多时不炸"（每次转发一个任务），平台线程池够用。
-* **反射降级**（先试虚拟线程，`NoSuchMethodError` 回落线程池）—— 26.x 侧保留虚拟线程，core 设 release 17；
-  代价是 core 里多一段反射，两条路径都要测。
-* **core 分两份** —— 不值。
+**已修**（2026-09-22，用户拍板）：`BridgeRuntime` 的 dispatcher 改成
+`Executors.newCachedThreadPool(...)`（守护线程，名字 `mcqq-dispatch`），`core_java_release=17`。
+选它是因为它保住了这段代码依赖的两个性质：**任务不等空闲线程**、**任务不被拒绝**。
+虚拟线程在本项目的收益只是"任务很多时不炸"，而负载是"每个转发事件一个短任务"，平台线程池够用。
 
-#### 三、8.5 低估之二：适配器差异不是"两处改名"
+**验证**：`clean build` 绿（31 任务）、core 测试 **47 个用例 0 失败**、字节码分层正确 ——
+`com/example/mcqq/core/*` 与 `com/example/mcqq/bukkit/common/*` = **61（Java 17）**，
+`com/example/mcqq/paper/*` = **69（Java 25）**。
+
+#### 四、适配器差异不是"两处改名"
 
 `forge/forge-26.1` 用的是 **FG7 时代的事件模型**，1.20.1 是另一套。对照 `refs/QueQiao/forge/origin`
 （一份真跨 1.16.5→1.21 的源码，用 `// IF >= forge-1.19` 这类标记）：
@@ -451,27 +487,29 @@ D:\...\core\BridgeRuntime.java:43: 错误: 找不到符号
 `source.sendSuccess(Supplier<Component>, boolean)` 也是 1.19+ → 这两行不用改。
 `getUsername()` 在 1.20.1 是否还在**未核实** —— 落地时编译一次就知道，不需要现在判断。
 
-#### 四、8.5 没提的一条：forge 模块是"按需 include"的
+#### 五、forge 模块是"按需 include"的
 
 `settings.gradle.kts` 里 forge **默认不在项目列表里**，要 `-PwithForge=true` 才加。
 原因是 ForgeGradle 的 mavenizer 在**配置阶段**就要下载整套工具链，网速差的机器上会让**任何**
-`./gradlew` 调用失败。legacy 构建要照抄这个门控。
+`./gradlew` 调用失败。**任何新的 forge 窗口都要走这个门控**（legacyforge 也要下工具链）。
+如果将来真建了 legacy 构建，它同样要照抄。
 
-#### 五、legacy 怎么共享 core —— 补第三个选择
+#### 六、落地顺序（修正版）
 
-* (c) legacy 直接把 core 的源码目录加进自己的 sourceSet：
-  `sourceSets.main.java.srcDir("../../core/src/main/java")`，再声明 core 那 4 个 `compileOnly` 依赖
-  （brigadier / qqbot-sdk / snakeyaml / slf4j-api —— **core 的依赖全是 `compileOnly`，已核实**）。
-  legacy 因此能自己决定 release 级别，不用管 core 的构建脚本。
-  代价：绕过 core 的构建脚本，core 将来加依赖要记得同步过去。
+1. ~~core 去虚拟线程 → `core_java_release=17`~~ **已做**（见"三"）。
+2. 在**主构建**里加 `forge/forge-1.20.1`，用 `net.neoforged.moddev.legacyforge`（2.0.147，与 neoforge 同版本）。
+   **先只建这一个模块、跑一次 `./gradlew :forge:forge-1.20.1:build`** —— 它同时回答"二"里那三条未验项。
+   若三条都过，`legacy/` 这个目录根本不需要存在。
+3. 从 `forge/forge-26.1` 抄适配器，按"四"的表换事件模型；`mods.toml` 用 1.20.1 的
+   `loaderVersion="${loader_version_range}"`（值 `[47,)`）+ `versionRange="[47.1.3,)"` +
+   `minecraft_version_range="[1.20.1, 1.21)"`；接上 shadowJar 的 reobf。
+4. CI 加一格，mc-publish 声明 `game-versions: [1.20.1, 1.20.2]`。
 
-#### 六、落地顺序（如果要走）
-
-1. core 去虚拟线程 → `core_java_release=17`（`bukkit-common` 跟着它，已核实是同一个属性）。
-2. 建 `legacy/`：自己的 wrapper（Gradle 8.8）、FG `[6.0,6.2)`、Java 17 toolchain、按需 include 的门控。
-3. 从 `forge/forge-26.1` 抄一份适配器，按上表换事件模型；`mods.toml` 用 1.20.1 的
-   `loaderVersion="${forge_version_range}"` + `versionRange="[47,)"` + `minecraft_version_range="[1.20.1,1.21)"`。
-4. CI 加一格（legacy 构建 + mc-publish 声明 `game-versions: [1.20.1, 1.20.2]`）。
+**万一第 2 步没过**（legacyforge 在 Gradle 9.7.1 上确实不行），再回到第一版方案：建 `legacy/`，
+自己的 wrapper（Gradle 8.8）+ FG `[6.0,6.2)` + Java 17 toolchain。那时共享 core 的第三个选择仍然可用：
+legacy 直接把 core 的源码目录加进自己的 sourceSet
+（`sourceSets.main.java.srcDir("../../core/src/main/java")` + core 那 4 个 `compileOnly` 依赖 ——
+**core 的依赖全是 `compileOnly`，已核实**），代价是绕过 core 的构建脚本、core 加依赖要记得同步。
 
 ---
 
@@ -518,13 +556,13 @@ D:\...\core\BridgeRuntime.java:43: 错误: 找不到符号
    你两代之间的源码差异**不止**那两处改名（事件注册模型不同，见 §8.6），但规模仍是"手写"量级，
    比引入一个生成工具便宜。**窗口数超过 6 个左右再回头考虑它。**
 3. **不抄 core 的 Java 8** —— QueQiaoTool 停在 Java 8 是为了 1.7.10/1.12.2；core 停在 **17** 就够
-   （1.20.1 也是 17）。⚠️ 但 core 现在停在 **21**，要先去掉虚拟线程才能降到 17，见 §8.6。
+   （1.20.1 也是 17）。core 已于 2026-09-22 落到 17（去掉虚拟线程，见 §8.6）。
 
 ### 9.4 于是形状变成
 
 ```
 mc-qq/                        Gradle 9.7.1 + JDK 25 daemon
-  core/                       release 17（1.20.1 / 1.21.x / 26.x 通吃）← **现在是 21**，见 §8.6
+  core/                       release 17（1.20.1 / 1.21.x / 26.x 通吃）← 2026-09-22 起真的是 17
   fabric/  neoforge/  forge/  26.x 窗口，描述符写范围
   bukkit/                     编译对 1.20.1 → 一个 jar 覆盖 1.20.1 → 26.3
 legacy/                       Gradle 8.8 + JDK 21 daemon（独立构建，自己的 wrapper）
@@ -532,7 +570,11 @@ legacy/                       Gradle 8.8 + JDK 21 daemon（独立构建，自己
   每个窗口一个子项目 + support_version.txt
 ```
 
-legacy 构建怎么共享 core，两个选择：
+⚠️ **`legacy/` 那一块现在是个问号**：§8.6 发现 1.20.1 的 Forge 可以用 `net.neoforged.moddev.legacyforge`
+（与主构建的 moddev 同 artifact 同版本）编，所以它可能根本不用存在。先按 §8.6"六"的第 2 步试一次，
+再决定要不要这一层。
+
+legacy 构建怎么共享 core，三个选择（**只有真建了 legacy 才需要选**）：
 
 * (a) core 发到 Maven Central（你已经有这条链），legacy `implementation("io.github.skiesworld:mcqq-core:x")`
   —— 干净、解耦，但改 core 要发版；

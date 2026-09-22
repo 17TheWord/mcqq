@@ -13,6 +13,21 @@ plugins {
 }
 
 /**
+ * 描述符的公共字段（显示名、作者、许可证、描述）从 `descriptors.properties` 读，**不从 `gradle.properties`**。
+ *
+ * `gradle.properties` 是 Java Properties 格式，Gradle 按 ISO-8859-1 读它：非 ASCII 值会被双重编码 ——
+ * "把" 在磁盘上是 E6 8A 8A，被读成 6 个字符，写回去就成了 C3 A6 C2 8A …。那些字节里有 C1 控制字符
+ * （U+0080–U+009F），YAML 1.1 拒绝它们，于是 Paper / Spigot 报 `Invalid plugin.yml` 并且**插件完全不加载**。
+ * JSON / TOML 容忍同样的字节 —— 这就是为什么当时只有 Bukkit 一侧炸得响。
+ *
+ * 在这里用 UTF-8 读一次、挂到根项目上就够：`Project.property` 会沿父项目向上找，所以 Kotlin 模块里的
+ * `property("mod_name")` 和 Groovy 模块里的裸 `mod_name` 都能拿到，五个平台模块的脚本一行都不用改。
+ */
+java.util.Properties().apply {
+    file("descriptors.properties").inputStream().reader(Charsets.UTF_8).use { load(it) }
+}.forEach { key, value -> extensions.extraProperties.set(key.toString(), value) }
+
+/**
  * Coordinates and repositories for every project. A repository declared at the root is not inherited by
  * subprojects, so it has to be said here once instead of in each of them; the same goes for the version, which
  * otherwise leaves the core jar unversioned.
@@ -23,6 +38,12 @@ subprojects {
     repositories {
         mavenCentral()
         maven("https://maven.fabricmc.net/") { name = "Fabric" }
+    }
+
+    // Gradle 过滤资源时默认用平台字符集。描述符是 UTF-8，填进去的值也是 UTF-8，所以写明，
+    // 而不是继承这台机器碰巧是什么（本机 file.encoding=UTF-8 但 native.encoding=GBK）。
+    tasks.withType<ProcessResources>().configureEach {
+        filteringCharset = "UTF-8"
     }
 
     /**

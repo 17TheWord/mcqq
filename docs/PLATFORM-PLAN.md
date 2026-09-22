@@ -77,7 +77,7 @@ forge/forge-26.1/
 | 抽什么 | 现在在哪 | 抽到哪 |
 | --- | --- | --- |
 | 版本事实（`mod_version` / 各平台坐标 / MC 窗口） | `gradle.properties` ✓ 已经是一处 | 不动；`platforms.yml` 只读 |
-| **描述符的公共字段**：显示名、描述、作者、许可证、仓库/issue 链接 | **4 份描述符里各写一遍** | 进 `gradle.properties`，各描述符用 `${...}` expand（现在只 expand 了 version/mod_id/范围） |
+| **描述符的公共字段**：显示名、描述、作者、许可证、仓库/issue 链接 | **4 份描述符里各写一遍** | 进 `descriptors.properties`（UTF-8），各描述符用 `${...}` expand（现在只 expand 了 version/mod_id/范围）。**不要放 `gradle.properties`** —— 那是 ISO-8859-1 读的，非 ASCII 会双重编码 |
 | **打包与 relocate**：`bundled` 配置、SDK/snakeyaml 依赖、shadowJar 的 relocate 列表与排除项、LICENSE/THIRD-PARTY 注入 | **fabric / neoforge / forge 三份 build 文件里各写一遍** | 一个约定插件（`buildSrc/` 或 `gradle/bundle.gradle.kts`），各平台 `apply` |
 | 平台清单（名字/子项目/jar/loaders/额外参数） | `platforms.yml` ✓ 已经是一处 | 不动 |
 | 依赖版本的集中声明 | `gradle.properties` + `property("...")` ✓ | 可选升级成 `gradle/libs.versions.toml`（version catalog，Gradle 官方推荐，类型安全） |
@@ -119,7 +119,9 @@ forge/forge-26.1/
    编译通过 + 拒绝路径通过，但"在 Spigot 上真能转发聊天"仍待验证（放 CI 或由用户跑一次）。
    **验证**：需要一个**真 Spigot 服务端**（BuildTools 现场编译，约 10 分钟）—— 这是新增的验证成本。
 4. ✅ **抽公共配置**（**已完成**）：
-   * **描述符的公共字段**（显示名 / 作者 / 许可证 / 仓库链接 / 描述）进 `gradle.properties`，
+   * **描述符的公共字段**（显示名 / 作者 / 许可证 / 仓库链接 / 描述）进 **`descriptors.properties`**
+     （**UTF-8**；一开始放进 `gradle.properties`，但那是 ISO-8859-1 读的，非 ASCII 双重编码后
+     YAML 1.1 会拒绝 `plugin.yml` —— 详见 `PROGRESS.md` 那条 bug 记录），
      五个描述符改用 `${...}`，各自的 `processResources` 一次 `expand(resourceFacts)` 填进去。
      平台的差异（`plugin.yml` 那句"这是哪份 jar"）仍留在各自描述符里。
    * **打包与 relocate**（`bundled` 配置、SDK/SnakeYAML 依赖、shadowJar 的改名列表与排除项、

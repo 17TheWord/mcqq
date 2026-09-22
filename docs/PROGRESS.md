@@ -31,6 +31,74 @@
 
 **没有落地任何代码**。`refs/` 里的 1.20.1 MDK 与鹊桥源码是本次的唯一证据来源。
 
+## forge-1.20.1：`legacy/` 大概率不用建（2026-09-22 复核，推翻当天早先的结论）
+
+用户问"给 forge 支持 1.20.1 要怎么做、好不好做"。我第一版答"代际差太大 → 必须建 `legacy/` 独立构建"，
+**当天就被自己推翻了**。完整记录在 `docs/MULTIPLATFORM.md` **§8.6**。
+
+* **代际差是真的**（1.20.1 官方 ForgeGradle MDK = Gradle 8.8 + FG `[6.0,6.2)` + Java 17；
+  本项目 = Gradle 9.7.1 + FG `[7.0.17,8)` + Java 25），**但它不决定"必须独立构建"**。
+* **推翻它的证据**：官方 MDK 仓库 `NeoForgeMDKs/MDK-Forge-1.20.1-ModDevGradle` 用的是
+  `net.neoforged.moddev.legacyforge`；ModDevGradle 的 `LEGACY.md` 原文说它是
+  *"released alongside the normal plugin with **the same version**"*、支持 *"1.17 up to 1.20.1"*、
+  且是 *"an 'addon' plugin ... on top of the normal plugin"*。
+  本地实证：缓存里的 `moddev-gradle-2.0.147.jar` **同时**提供 `net.neoforged.moddev` 和
+  `net.neoforged.moddev.legacyforge` —— 同 artifact 同版本，**没有"同一 plugin id 两个版本"的冲突**。
+* → `forge/forge-1.20.1` 可以是**主构建**里的一个子项目，与 neoforge-26.1 共用 moddev-gradle 2.0.147。
+* **还没验的三条**（跑一次 build 就知道）：legacyforge 在 Gradle 9.7.1 上能否跑（MDK 给的是 8.14.5）；
+  它与 FG7 同构建共存有无摩擦；1.20.1 的产物要 reobf 到 SRG，得把
+  `obfuscation { reobfuscate(tasks.named('shadowJar'), sourceSets.main) }` 接上（我们发的正是 shadowJar）。
+* 适配器差异**不止**"两处改名"：26.x 用 `ServerChatEvent.BUS.addListener(...)` + `getUsername()/getRawText()`，
+  1.20.1 用 `MinecraftForge.EVENT_BUS.register(this)` + `@SubscribeEvent` + `getPlayer()/getMessage().getString()`；
+  `@Mod` 构造器也从"注入 FMLJavaModLoadingContext"回到无参（对照 `refs/QueQiao/forge/origin`）。
+  好消息：`sendSystemMessage(Component)` 1.19+ 就有，`ForgePlatform` 那两行不用改。
+
+## core → release 17（2026-09-22，用户拍板）
+
+`BridgeRuntime` 的 dispatcher 从 `Executors.newVirtualThreadPerTaskExecutor()` 换成
+`Executors.newCachedThreadPool(...)`（守护线程，名字 `mcqq-dispatch`）；`core_java_release=17`。
+
+选缓存线程池是因为它保住了这段代码依赖的两个性质：**任务不等空闲线程**、**任务不被拒绝**
+（`newFixedThreadPool` 会排队；有界池 + AbortPolicy 会把异常抛进游戏的聊天事件里）。
+虚拟线程在本项目的收益只是"任务很多时不炸"，而负载是"每个转发事件一个短任务"，平台线程池够用。
+
+**验证**：`clean build` 绿（31 任务）；core 测试 **47 用例 0 失败**；字节码分层（`javap -verbose` 实测）——
+`com/example/mcqq/core/*` 与 `com/example/mcqq/bukkit/common/*` = **61（Java 17）**，
+`com/example/mcqq/paper/*` = **69（Java 25）**。
+
+## 修掉一个"Bukkit 插件完全不加载"的编码 bug（2026-09-22，第 4 步的回归）
+
+**现象**：冒烟测试里 Paper 报 `Invalid plugin.yml`，插件一条日志都没有（`Initialized 0 plugins`）。
+
+**根因链**（Python 复现出的字节与 jar 里**逐字节一致**）：
+
+```
+gradle.properties 磁盘上是正确 UTF-8: E6 8A 8A E8 81 8A …        ("把聊天")
+  ↓ Java Properties 按 ISO-8859-1 读（Gradle 对 gradle.properties 就是这个规范行为）
+字符: æ U+008A U+008A è U+0081 U+008A …（含 C1 控制字符 U+008A）
+  ↓ 写成 UTF-8
+jar 里: C3 A6 C2 8A C2 8A C3 A8 C2 81 C2 8A …
+  ↓ SnakeYAML 按 UTF-8 读，YAML 1.1 拒绝 C1 控制字符
+Invalid plugin.yml → 插件完全不加载
+```
+
+**这是第 4 步的回归**：中文原先写在描述符里，Gradle 按 UTF-8 读写都没事；搬进 `gradle.properties`
+才中招。**为什么只有 Bukkit 炸得响**：JSON / TOML 容忍那些字节，fabric / neoforge / forge 只是描述
+显示成乱码（也不对，但不致命）；YAML 1.1 是严格拒绝的。
+
+**修法**：描述符那 6 个公共字段挪到 **`descriptors.properties`（UTF-8）**；根 `build.gradle.kts` 顶部用
+`InputStreamReader(UTF_8)` 读进来、挂成根项目的 extra property —— `Project.property` 会沿父项目向上找，
+所以 5 个平台模块的脚本**一行都没改**。另在 `subprojects` 里给 `ProcessResources` 显式设
+`filteringCharset = "UTF-8"`（本机 `file.encoding=UTF-8` 但 `native.encoding=GBK`，不想依赖这个巧合）。
+
+**验证**（这次连中文一起查 —— 上次就是漏了这一步才让 bug 溜过去）：4 个 jar 的描述符
+**0 个未展开 `${...}`、0 个 C1 控制字符、中文逐字正确**；真机跑 Paper 26.2 两次 ——
+paper 那份 `Enabling mcqq` / `平台 paper-26.2，主线程调度走 经典调度器` / `Disabling` 齐全，
+spigot 那份走到它该走的拒绝路径，**两份都 0 个 `Invalid plugin.yml`**。
+
+**教训**：第 4 步我只验了"占位符展开了、ASCII 字段对"就宣布通过 —— **没验编码**。
+以后凡"把非 ASCII 数据搬过一层构建机制"，验一次**真机加载**比 grep 字段名可靠。
+
 ## 平台重构第 4 步：抽公共配置（2026-09-22）
 
 两块：

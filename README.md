@@ -45,7 +45,10 @@ paper/paper-26.1/              Paper 变体：入口、新聊天事件（AsyncCh
 Paper 变体与 Spigot 变体都依赖它，各自只补自己那点差异（Paper 用 Adventure 渲染 + Folia 调度，
 Spigot 直接发 `§` 字符串）。
 
-**公共的东西各只有一处**：版本事实（含描述符的显示名/作者/许可证/链接）在 `gradle.properties`；
+**公共的东西各只有一处**：版本事实在 `gradle.properties`；
+描述符的显示名/作者/许可证/链接/描述在 **`descriptors.properties`**（**UTF-8，别并回 gradle.properties** ——
+原因写在那个文件顶部：Java Properties 是 ISO-8859-1，非 ASCII 会被双重编码，而 YAML 1.1 会因此拒绝
+`plugin.yml`，Bukkit 插件完全不加载）；
 平台清单在 `platforms.yml`；打包与 relocate（打进去哪些库、改哪些名、塞哪两个许可文件）在根 `build.gradle.kts`。
 所以每个平台模块只剩"自己的名字 + 自己的 API 依赖 + 自己的描述符"。
 
@@ -67,7 +70,7 @@ CI runner 的网络没问题，所以两个工作流都带了这个参数。细�
 * **id = `mcqq`**：三个描述符、配置目录（`config/mcqq/`、Paper 侧 `plugins/mcqq/`）、插件名、资源路径、日志器名。
 * **项目名 = `mc-qq`**：仓库名、jar 文件名（`mc-qq-<版本>.jar`）、聊天栏前缀 `[mc-qq]`。
 
-两个拼法各有出处，改的时候别只改一处 —— `gradle.properties` 的 `mod_id` 与 `Constants.MOD_ID` 是同一件事的两侧。
+两个拼法各有出处，改的时候别只改一处 —— `descriptors.properties` 的 `mod_id` 与 `Constants.MOD_ID` 是同一件事的两侧。
 
 * **接缝只有一个接口**：`MinecraftPlatform { label, configDir, broadcast, onMainThread, registerCommands }`。
   `MinecraftServer` / `ServerPlayer` / `Component` 一律不进 core —— adapter 把事件拼成句子后交过去，

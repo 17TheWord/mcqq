@@ -40,7 +40,17 @@ public final class BridgeRuntime implements AutoCloseable {
         this.platform = platform;
         this.config = config;
         // One task per dispatch, off the game's thread; the bus keeps each conversation's order itself.
-        this.dispatcher = Executors.newVirtualThreadPerTaskExecutor();
+        //
+        // A cached pool rather than virtual threads, even though virtual threads fit this shape better:
+        // `core` is compiled to Java 17 so the same jar also runs on 1.20.1, and
+        // `newVirtualThreadPerTaskExecutor` is a Java 21 API. The pool keeps the two properties this code
+        // depends on — a task never waits for a free thread, and a task is never rejected — and the load is one
+        // short task per forwarded event, so the thread count stays small in practice.
+        this.dispatcher = Executors.newCachedThreadPool(runnable -> {
+            Thread thread = new Thread(runnable, Constants.MOD_ID + "-dispatch");
+            thread.setDaemon(true);
+            return thread;
+        });
         this.problems.addAll(config.problems());
     }
 
