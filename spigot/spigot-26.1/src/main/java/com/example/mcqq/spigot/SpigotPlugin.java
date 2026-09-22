@@ -38,7 +38,7 @@ public final class SpigotPlugin extends JavaPlugin {
         SpigotListeners.registerOnce(this, bridge);
         platform.registerCommands(bridge.commands());
 
-        Log.info("mc-qq loaded; the QQ bridge comes up with the server");
+        Log.info("mc-qq 已加载；QQ 桥接会随服务器启动");
         bridge.start();
     }
 

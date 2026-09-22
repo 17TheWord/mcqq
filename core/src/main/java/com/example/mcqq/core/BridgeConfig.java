@@ -25,11 +25,9 @@ import org.yaml.snakeyaml.Yaml;
  * {@code config/mcqq/config.yml}: which bots run, which groups they bridge, and which Minecraft events go out.
  *
  * <p>The AppSecret can be written straight into this file ({@code secret:}) or named as an environment variable
- * ({@code secret-env:}). **The file is the primary way on purpose**: panel hosts do not let the owner set
- * environment variables at all, and on a panel the provider can read the process environment anyway — so
- * requiring one bought nothing there and shut out most of the people who would use this. The environment
- * variable stays for self-hosted servers, where keeping the secret out of a file that gets backed up and pasted
- * into bug reports is worth something.
+ * ({@code secret-env:}). Both are supported. The file is what the template shows, because it is the one that
+ * needs nothing beyond editing the file; the variable is there for an operator who would rather keep the secret
+ * out of something that gets backed up and pasted into bug reports.
  *
  * <p>A missing file is created from the packaged template, so a first start shows an admin what the knobs are
  * instead of failing.
@@ -271,7 +269,7 @@ public final class BridgeConfig {
             syncTemplates(path);
         } else {
             Files.write(path, templateBytes());
-            Log.warn("wrote the default config to " + path + "; fill in app-id and the group openids");
+            Log.warn("已写出默认配置到 " + path + "；把 app-id、secret 和群的 openid 填进去");
         }
         return parse(path);
     }
@@ -367,7 +365,7 @@ public final class BridgeConfig {
      * <p>This is the one place the file changes for a reason other than "it was missing a default", and it is
      * the same bargain as the rest of this class: the comments live in {@code config.example.yml} and the
      * previous bytes go to {@code config.yml.bak}, so a dump that loses the operator's blank lines costs
-     * nothing. It is what lets somebody on a panel host bind a group from the console, without pasting a
+     * nothing. It is what lets an operator bind a group from the console, without pasting a
      * thirty-character id into a file editor.
      *
      * @return the label the group got, so the caller can say what it did
@@ -428,7 +426,7 @@ public final class BridgeConfig {
             Object loaded = new Yaml().load(reader);
             if (!(loaded instanceof Map)) {
                 return new BridgeConfig(Map.of(), Map.of(), false,
-                        List.of(path + " is empty or is not a mapping"));
+                        List.of(path + " 是空的，或者不是一个键值对（YAML 对象）"));
             }
             root = (Map<String, Object>) loaded;
         }
@@ -446,13 +444,13 @@ public final class BridgeConfig {
         }
         for (Object entry : (List<Object>) configuredBots) {
             if (!(entry instanceof Map)) {
-                problems.add("a 'bots:' entry is not a mapping");
+                problems.add("'bots:' 里有一项不是键值对，已忽略");
                 continue;
             }
             Map<String, Object> botMap = (Map<String, Object>) entry;
             String appId = text(botMap.get("app-id"));
             if (appId.isEmpty()) {
-                problems.add("a bot has no app-id, skipped");
+                problems.add("有个 bot 没写 app-id，已跳过");
                 continue;
             }
             String id = text(botMap.get("id"));
@@ -461,24 +459,24 @@ public final class BridgeConfig {
             }
             if (appId.contains(PLACEHOLDER)) {
                 // Starting it would only get a refusal from the platform, so say what to edit instead.
-                problems.add("bot " + id + " still has the " + PLACEHOLDER + " app-id from the template, skipped");
+                problems.add("bot " + id + " 的 app-id 还是模板里的 " + PLACEHOLDER + "，已跳过");
                 continue;
             }
             Map<String, Group> groups = groups(botMap.get("groups"), id, problems);
             if (groups.isEmpty()) {
-                // 两条路都要说：填文件，或者让群先说一句话再敲 /qq bind —— 后者是面板服上唯一走得通的路。
+                // 两条路都要说：填文件，或者让群先说一句话再敲 /qq bind。
                 problems.add("bot " + id + " 还没绑任何群 —— 在群里 @ 一下机器人然后敲 /qq bind，"
                         + "或把群的 openid 填进 'groups:'");
             }
             String key = id;
             if (bots.containsKey(key)) {
-                problems.add("duplicate bot id " + key + "; the later one wins");
+                problems.add("bot id 重复：" + key + " —— 后一个生效");
             }
             // A secret still carrying the template's placeholder counts as absent: the runtime then says what to
             // write, instead of handing "REPLACE_ME" to the platform and reporting a login failure.
             String secret = text(botMap.get("secret"));
             if (secret.contains(PLACEHOLDER)) {
-                problems.add("bot " + id + " still has the " + PLACEHOLDER + " secret from the template");
+                problems.add("bot " + id + " 的 secret 还是模板里的 " + PLACEHOLDER);
                 secret = "";
             }
             // Both written is a config nobody means to write, and silently picking one is how "why is it still
@@ -533,17 +531,17 @@ public final class BridgeConfig {
         }
         for (Object entry : (List<Object>) configured) {
             if (!(entry instanceof Map)) {
-                problems.add("bot " + botId + " has a 'groups:' entry that is not a mapping");
+                problems.add("bot " + botId + " 的 'groups:' 里有一项不是键值对，已忽略");
                 continue;
             }
             Map<String, Object> groupMap = (Map<String, Object>) entry;
             String openid = text(groupMap.get("group-openid"));
             if (openid.isEmpty()) {
-                problems.add("bot " + botId + " has a group with no group-openid, skipped");
+                problems.add("bot " + botId + " 有个群没写 group-openid，已跳过");
                 continue;
             }
             if (openid.contains(PLACEHOLDER)) {
-                problems.add("bot " + botId + " has the " + PLACEHOLDER + " group-openid from the template, skipped");
+                problems.add("bot " + botId + " 的 group-openid 还是模板里的 " + PLACEHOLDER + "，已跳过");
                 continue;
             }
             Set<McEvent> send = new LinkedHashSet<>();
@@ -554,7 +552,7 @@ public final class BridgeConfig {
                     if (event.isPresent()) {
                         send.add(event.get());
                     } else {
-                        problems.add("group " + openid + " listens for unknown event '" + text(name) + "'");
+                        problems.add("群 " + openid + " 订阅了未知的事件 '" + text(name) + "'，已忽略");
                     }
                 }
             } else if (sendTo == null) {

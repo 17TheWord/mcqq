@@ -37,6 +37,6 @@ public final class McQqMod implements ModInitializer {
             bridge.stop();
             platform.detach();
         });
-        Log.info(MOD_ID + " loaded; the QQ bridge comes up with the server");
+        Log.info(MOD_ID + " 已加载；QQ 桥接会随服务器启动");
     }
 }

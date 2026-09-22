@@ -11,8 +11,8 @@ import org.junit.jupiter.api.Test;
  * The registry behind {@code /qq bind}: what an operator is allowed to bind, and what they are told when the
  * answer is "nothing yet".
  *
- * <p>Worth testing without a server, because this is the only way to learn a group's openid on a panel host —
- * there is no log to read and no file editor in reach, so if this gets it wrong the operator has no way in.
+ * <p>Worth testing without a server, because this is the only way to learn a group's openid without reading a
+ * log — and if it gets that wrong, the operator has no way in.
  */
 class UnboundGroupsTest {
 

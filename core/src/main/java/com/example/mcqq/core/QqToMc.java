@@ -124,7 +124,7 @@ public final class QqToMc {
      * Records a group that talked to us without being in the config, and says so once.
      *
      * <p>This is the operator's way in. The config wants an openid, the only source of one is a message from the
-     * group, and on a panel host there is no shell to read a log from — so the id is kept for {@code /qq status}
+     * group, and a log is not always where the operator is looking — so the id is kept for {@code /qq status}
      * and {@code /qq bind}, and the first sighting is loud enough to be found in a log. Once per group and not
      * once per message, or a busy group would own the console.
      */

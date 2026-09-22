@@ -174,7 +174,7 @@ Paper 用真服务端 + `plugins/`，Fabric 用真服务端 + `mods/`，NeoForge
 （缺键走内置默认），所以这一步不改变任何行为，只是让你能看见并改它。
 带注释的说明始终在 `config.example.yml` 里 —— 补过的 `config.yml` 顶部会指向它。
 
-**AppSecret 直接写在 `config.yml` 里** —— 面板服不让服主设环境变量，所以这是主路径：
+**AppSecret 直接写在 `config.yml` 里**（模板给的也是这一行）：
 
 ```yaml
 bots:
@@ -188,7 +188,7 @@ bots:
         send-to-qq: [chat, join, quit, death]
 ```
 
-自建服想把密钥留在环境变量里（不进文件）时，把 `secret:` 那行换成 `secret-env: QQ_BOT_SECRET` 即可；
+想把密钥放在环境变量里（不进文件）时，把 `secret:` 那行换成 `secret-env: QQ_BOT_SECRET` 即可；
 两个都填以文件里的为准，日志里会说一声。
 
 ⚠️ 因为密钥现在就在这个文件里，**别把 `config.yml` 贴到 issue / 群里** —— 要贴就贴同目录那份
@@ -196,8 +196,7 @@ bots:
 
 * `group-openid` 是群的 openid，不是 QQ 群号。**拿它不用手抄**：先把 `groups:` 留空（或整段删掉），
   开服后在群里 @ 一次机器人，然后在控制台敲 `/qq bind` —— 插件会把最近说话的那个群写进 `config.yml`
-  并自动重载。这是面板服上唯一不用碰文件的绑定方式。
-  也可以手填：openid 会出现在服务端日志和 `/qq status` 里。
+  并自动重载 —— 这条不用碰文件。也可以手填：openid 会出现在服务端日志和 `/qq status` 里。
 * `/qq bind <openid 前几位>` 指定绑哪个群；`/qq status` 会列出「收到过消息但还没绑定」的群。
   `/qq bind` 只接受**机器人真的收到过消息**的群，所以打错字也不会把聊天栏接到陌生的群去。
 * `receive-from-qq: false` 就是「只出不进」；`send-to-qq` 缺省取那四项，写 `[]` 即「只进不出」。

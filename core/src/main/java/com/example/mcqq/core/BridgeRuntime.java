@@ -147,19 +147,19 @@ public final class BridgeRuntime implements AutoCloseable {
     }
 
     private void register(BridgeConfig.Bot botConfig) {
-        // The file first: that is the only option on a panel host, which is where most of these run. The
-        // environment variable is the fallback for self-hosted servers that would rather not keep the secret in
-        // a file at all. (The config already reports it when both are written.)
+        // The file first, matching what the template shows. The environment variable is the other supported way,
+        // for an operator who would rather not keep the secret in a file. (The config already reports it when
+        // both are written.)
         String secret = botConfig.secret();
         if (secret.isBlank()) {
             secret = System.getenv(botConfig.secretEnvironmentVariable());
         }
         if (secret == null || secret.isBlank()) {
-            // Say both ways, because the person reading this is most likely on a panel and has never been able
-            // to set an environment variable in their life.
+            // Say both ways: whoever reads this is here because nothing connected, and the two lines that
+            // would fix it are next to each other in the file.
             problems.add("bot " + botConfig.id() + ": 没有可用的 AppSecret —— 在 config.yml 里写"
-                    + " secret: <AppSecret>（面板服推荐），或设环境变量 "
-                    + botConfig.secretEnvironmentVariable() + "（自建服）；已跳过");
+                    + " secret: <AppSecret>，或设环境变量 "
+                    + botConfig.secretEnvironmentVariable() + "；已跳过");
             return;
         }
         BotConfig qq = BotConfig.builder(botConfig.appId())
@@ -171,7 +171,7 @@ public final class BridgeRuntime implements AutoCloseable {
         bot.handlers().register(new QqToMc(platform, config, botConfig.id(), unbound));
         bots.register(bot);
         registered.add(bot);
-        Log.info("bridging bot " + botConfig.id() + " with " + botConfig.groups().size() + " group(s)");
+        Log.info("已接入 bot " + botConfig.id() + "，绑了 " + botConfig.groups().size() + " 个群");
     }
 
     private void connectAll() {
@@ -181,7 +181,7 @@ public final class BridgeRuntime implements AutoCloseable {
                 bot.start();
             } catch (Exception e) {
                 problems.add("bot " + appId + " 启动失败：" + e.getMessage());
-                Log.error("bot " + appId + " could not start; /qq status shows why", e);
+                Log.error("bot " + appId + " 启动失败；原因见 /qq status", e);
             }
         }
         connecting = false;

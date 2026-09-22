@@ -95,7 +95,7 @@ class BridgeConfigTest {
 
     @Test
     void readsTheSecretStraightFromTheFile() throws Exception {
-        // 面板服不让设环境变量，所以"密钥写在文件里"是主路径 —— 这条别悄悄回归。
+        // 密钥写在文件里是主路径 —— 这条别悄悄回归。
         BridgeConfig config = read("""
                 bots:
                   - id: main
@@ -288,7 +288,8 @@ class BridgeConfigTest {
 
         assertTrue(config.bots().isEmpty());
         assertEquals(1, config.problems().size(), config.problems().toString());
-        assertTrue(config.problems().get(0).contains("not a mapping"), config.problems().toString());
+        // 断言它说了是哪个文件，而不是断言具体措辞 —— 措辞会变，文件名不会。
+        assertTrue(config.problems().get(0).contains("config.yml"), config.problems().toString());
     }
 
     @Test

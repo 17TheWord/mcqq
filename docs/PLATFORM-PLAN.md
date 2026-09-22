@@ -6,7 +6,7 @@
 
 ## 一、调研：现在服务器都在用什么
 
-**方法**：bStats 的 `serverSoftware` 图（每个插件一张，聚合起来当市场样本）。
+**方法**：bStats 的 `serverSoftware` 图（每个插件一张，聚合起来当覆盖样本）。
 样本 = 5 个装了 bStats 的插件（TAB Reborn 等），合计 **46,482 台服务器**。
 （bStats 的 API 现在要带 User-Agent，否则 403。）
 
@@ -19,7 +19,7 @@
 | 其它（Leaves / Ketting / Titanium …） | < 1% | 多为 Paper/Folia 分支 |
 
 ⚠️ **样本偏差**：这是"装了这几个插件的服务器"，会比全体更偏 Paper（愿意装插件的服更可能上 Paper）。
-所以 6.1% 这个数字按**量级**看：Spigot 确实还有一小块真实市场，但不是大头。
+所以 6.1% 这个数字按**量级**看：Spigot 确实还有一小块真实覆盖，但不是大头。
 
 **结论**：Spigot 值得支持（6% 不是噪声），但**不能为它牺牲 Paper 侧的体验**（88%）。
 Folia 1.5% 值得覆盖，而它**不需要单独目录**（见第三节）。
@@ -44,7 +44,7 @@ Folia 1.5% 值得覆盖，而它**不需要单独目录**（见第三节）。
 | --- | --- | --- | --- |
 | **A. spigot + paper**（推荐） | 2 个 | paper 那份要带 Folia 探测（已有，10 行） | 产物少；Folia 用户拿 paper 那份就能跑（已验证） |
 | B. spigot + paper + folia | 3 个 | `folia/` 与 `paper/` **只差描述符一个字段**，等于复制 | 每个变体零运行期探测，概念上更"一个平台一个目录" |
-| C. 只有 spigot（一个 jar 全吃） | 1 个 | 必须用已废弃的 `AsyncPlayerChatEvent`；**Paper 是否仍触发它未实测** —— 一旦 Paper 哪天不触发了，88% 的市场聊天就哑了 | 产物最少 |
+| C. 只有 spigot（一个 jar 全吃） | 1 个 | 必须用已废弃的 `AsyncPlayerChatEvent`；**Paper 是否仍触发它未实测** —— 一旦 Paper 哪天不触发了，88% 的服务器的聊天就哑了 | 产物最少 |
 
 **倾向 A**：Spigot 那份用老事件（它本来就在 Spigot 上），Paper 那份用新事件（不碰废弃 API），
 Folia 靠 paper 那份 + 运行期探测覆盖。**如果用户坚持"零运行期探测"，那就 B** ——

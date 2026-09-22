@@ -13,7 +13,7 @@ import java.util.Map;
  * <p>It exists because of the order things happen in: the config asks for a {@code group-openid}, and the only
  * way to learn one is for the group to send a message — which is also the exact moment the bridge has to decide
  * what to do with a group it does not recognise. Dropping it quietly leaves the operator with nothing to paste
- * into the file, and on a panel host there is no shell to read a log from either. So it is remembered instead:
+ * into the file, and a log is not always where the operator is looking. So it is remembered instead:
  * reported in the log once per group, listed by {@code /qq status}, and accepted by {@code /qq bind} without
  * anyone having to copy an id.
  *

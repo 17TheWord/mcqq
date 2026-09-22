@@ -10,8 +10,8 @@ import java.util.List;
  * {@code /qq bind} — binds a group that has already talked to a bot, without opening the config.
  *
  * <p>It exists because of the order things happen in. The config wants a {@code group-openid}; the only place
- * that id appears is a message from the group; and the people this is for run on panel hosts, where reading a
- * log and editing a file <em>is</em> the problem. So a bare {@code /qq bind} takes the group heard from most
+ * that id appears is a message from the group; and reading a log or editing a file <em>is</em> exactly what
+ * the operator is trying to avoid. So a bare {@code /qq bind} takes the group heard from most
  * recently — the operator types six characters right after asking the group to say something — and an argument
  * (the openid, or a long enough prefix of it) picks a different one.
  *

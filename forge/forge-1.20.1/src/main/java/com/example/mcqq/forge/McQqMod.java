@@ -44,6 +44,6 @@ public final class McQqMod {
             platform.detach();
         });
 
-        Log.info(Constants.MOD_ID + " loaded; the QQ bridge comes up with the server");
+        Log.info(Constants.MOD_ID + " 已加载；QQ 桥接会随服务器启动");
     }
 }
