@@ -39,6 +39,9 @@ subprojects {
     group = property("maven_group").toString()
     version = property("mod_version").toString()
     repositories {
+        // 试一个还没发版的 SDK 时用本地仓库那份（publishToMavenLocal 或手工装的）。
+        // 发版之后这里可以撤掉 —— 它会让本地旧副本盖住 Central，不适合长期留着。
+        mavenLocal()
         mavenCentral()
         maven("https://maven.fabricmc.net/") { name = "Fabric" }
     }
