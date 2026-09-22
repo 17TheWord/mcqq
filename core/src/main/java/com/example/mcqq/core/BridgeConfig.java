@@ -345,15 +345,80 @@ public final class BridgeConfig {
     }
 
     private static void writeYaml(Path path, Map<String, Object> root) throws IOException {
+        writeYaml(path, root,
+                "# 这个文件被 " + Constants.MOD_ID + " 补全过：升级时把新增的键加了进来，值就是内置默认（行为与之前一致）。\n");
+    }
+
+    private static void writeYaml(Path path, Map<String, Object> root, String why) throws IOException {
         DumperOptions options = new DumperOptions();
         options.setDefaultFlowStyle(DumperOptions.FlowStyle.BLOCK);
         options.setIndent(2);
         try (Writer writer = Files.newBufferedWriter(path, StandardCharsets.UTF_8)) {
-            writer.write("# 这个文件被 " + Constants.MOD_ID + " 补全过：升级时把新增的键加了进来，值就是内置默认（行为与之前一致）。\n"
+            writer.write(why
                     + "# 带注释的完整说明在同目录的 " + EXAMPLE_FILE + "，改动前的版本备份在 "
                     + path.getFileName() + BACKUP_SUFFIX + "。\n");
             new Yaml(options).dump(root, writer);
         }
+    }
+
+    /**
+     * Adds one group to one bot and rewrites the file — what {@code /qq bind} is built on.
+     *
+     * <p>This is the one place the file changes for a reason other than "it was missing a default", and it is
+     * the same bargain as the rest of this class: the comments live in {@code config.example.yml} and the
+     * previous bytes go to {@code config.yml.bak}, so a dump that loses the operator's blank lines costs
+     * nothing. It is what lets somebody on a panel host bind a group from the console, without pasting a
+     * thirty-character id into a file editor.
+     *
+     * @return the label the group got, so the caller can say what it did
+     * @throws IOException when the file cannot be read or written, or the bot or group is not there to change;
+     *     the message is written for the operator, because that is where it ends up
+     */
+    @SuppressWarnings("unchecked")
+    public static String bindGroup(Path path, String botId, String groupOpenid) throws IOException {
+        Map<String, Object> root = readYaml(path);
+        if (root == null) {
+            throw new IOException("读不出 " + path.getFileName() + "（它不是一个 YAML 对象？）");
+        }
+        if (!(root.get("bots") instanceof List)) {
+            throw new IOException(path.getFileName() + " 里没有 bots 段");
+        }
+        for (Object entry : (List<Object>) root.get("bots")) {
+            if (!(entry instanceof Map)) {
+                continue;
+            }
+            Map<String, Object> bot = (Map<String, Object>) entry;
+            if (!botId.equals(text(bot.get("id")))) {
+                continue;
+            }
+            Object configured = bot.get("groups");
+            List<Object> groups = configured instanceof List ? (List<Object>) configured : new ArrayList<>();
+            for (Object group : groups) {
+                if (group instanceof Map
+                        && groupOpenid.equals(text(((Map<String, Object>) group).get("group-openid")))) {
+                    throw new IOException("这个群已经绑在 bot " + botId + " 上了");
+                }
+            }
+            String label = "群 " + lastSix(groupOpenid);
+            Map<String, Object> added = new LinkedHashMap<>();
+            added.put("group-openid", groupOpenid);
+            // Deliberately no send-to-qq: absent means the default set, which is what a new binding wants.
+            added.put("label", label);
+            groups.add(added);
+            bot.put("groups", groups);
+
+            Path backup = path.resolveSibling(path.getFileName() + BACKUP_SUFFIX);
+            Files.copy(path, backup, StandardCopyOption.REPLACE_EXISTING);
+            writeYaml(path, root,
+                    "# 这个文件被 " + Constants.MOD_ID + " 改过：/qq bind 把一个群加了进来。\n");
+            return label;
+        }
+        throw new IOException("配置里没有 id 是 " + botId + " 的 bot");
+    }
+
+    /** The tail of an id, which is all that is worth showing of an openid nobody can read anyway. */
+    private static String lastSix(String id) {
+        return id.length() <= 6 ? id : id.substring(id.length() - 6);
     }
 
     /** Reads and validates; a broken entry is reported in {@link #problems()} and the rest still loads. */
@@ -401,7 +466,9 @@ public final class BridgeConfig {
             }
             Map<String, Group> groups = groups(botMap.get("groups"), id, problems);
             if (groups.isEmpty()) {
-                problems.add("bot " + id + " bridges no group; add one under 'groups:'");
+                // 两条路都要说：填文件，或者让群先说一句话再敲 /qq bind —— 后者是面板服上唯一走得通的路。
+                problems.add("bot " + id + " 还没绑任何群 —— 在群里 @ 一下机器人然后敲 /qq bind，"
+                        + "或把群的 openid 填进 'groups:'");
             }
             String key = id;
             if (bots.containsKey(key)) {

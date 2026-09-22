@@ -17,8 +17,12 @@ import java.util.Optional;
  * comes from the template in force for that group (see {@link Templates}). An empty template means the group
  * wants this event to stay quiet.
  *
- * <p>Every way a message can be dropped says so through {@link Log#debug} — an unbound group, a group set to
- * outgoing only, a duplicate push from the platform. Silence is the hardest thing to debug.
+ * <p>Every way a message can be dropped says so through {@link Log#debug} — a group set to outgoing only, a
+ * duplicate push from the platform. Silence is the hardest thing to debug.
+ *
+ * <p>The one exception is an unbound group, and it is the important one: that is the case where the operator is
+ * still trying to find out what to put in the file. It goes into {@link UnboundGroups} and is logged once at
+ * WARN with the id they need, instead of being dropped without a trace.
  *
  * <p>Everything lands on the receiving thread of the SDK's dispatcher, so the one thing done here is handing the
  * line to the platform, which owns the hop onto the game's thread. Nothing blocking belongs on that path.
@@ -30,6 +34,8 @@ public final class QqToMc {
 
     private final MinecraftPlatform platform;
     private final BridgeConfig config;
+    private final String botId;
+    private final UnboundGroups unbound;
     private final Map<String, Boolean> seen = new LinkedHashMap<>(64, 0.75f, true) {
         @Override
         protected boolean removeEldestEntry(Map.Entry<String, Boolean> eldest) {
@@ -37,16 +43,18 @@ public final class QqToMc {
         }
     };
 
-    public QqToMc(MinecraftPlatform platform, BridgeConfig config) {
+    public QqToMc(MinecraftPlatform platform, BridgeConfig config, String botId, UnboundGroups unbound) {
         this.platform = platform;
         this.config = config;
+        this.botId = botId;
+        this.unbound = unbound;
     }
 
     @On({EventType.GROUP_MESSAGE_CREATE, EventType.GROUP_AT_MESSAGE_CREATE})
     public void onGroupMessage(QQMessageEvent message) {
         Optional<BridgeConfig.Group> bound = group(message);
         if (bound.isEmpty()) {
-            Log.debug("收到群 " + message.conversationId() + " 的消息，但这个群没绑定，忽略");
+            noteUnbound(message.conversationId());
             return;
         }
         BridgeConfig.Group group = bound.get();
@@ -83,7 +91,7 @@ public final class QqToMc {
     public void onGroupMemberChange(QQNoticeEvent notice) {
         Optional<BridgeConfig.Group> bound = group(notice);
         if (bound.isEmpty()) {
-            Log.debug("收到群 " + notice.conversationId() + " 的成员变动，但这个群没绑定，忽略");
+            noteUnbound(notice.conversationId());
             return;
         }
         BridgeConfig.Group group = bound.get();
@@ -110,6 +118,23 @@ public final class QqToMc {
 
     private Optional<BridgeConfig.Group> group(QQEvent event) {
         return config.group(event.conversationId());
+    }
+
+    /**
+     * Records a group that talked to us without being in the config, and says so once.
+     *
+     * <p>This is the operator's way in. The config wants an openid, the only source of one is a message from the
+     * group, and on a panel host there is no shell to read a log from — so the id is kept for {@code /qq status}
+     * and {@code /qq bind}, and the first sighting is loud enough to be found in a log. Once per group and not
+     * once per message, or a busy group would own the console.
+     */
+    private void noteUnbound(String groupOpenid) {
+        if (unbound.remember(botId, groupOpenid)) {
+            Log.warn("config: 收到群 " + groupOpenid + " 的消息，但它没绑定 —— 在控制台敲 /qq bind 就能绑上"
+                    + "（或把 " + groupOpenid + " 填进 config.yml 的 group-openid）");
+        } else {
+            Log.debug("收到群 " + groupOpenid + " 的消息，这个群还是没绑定，忽略");
+        }
     }
 
     private synchronized boolean firstSeen(String key) {

@@ -2,11 +2,15 @@ package com.example.mcqq.core;
 
 import com.example.mcqq.core.command.CommandTree;
 import com.example.mcqq.core.command.RootCommand;
+import com.example.mcqq.core.command.sub.BindCommand;
 import com.example.mcqq.core.command.sub.HelpCommand;
 import com.example.mcqq.core.command.sub.ReloadCommand;
 import com.example.mcqq.core.command.sub.StatusCommand;
 import com.example.mcqq.core.command.sub.TestCommand;
 import com.example.mcqq.core.command.sub.TemplatesCommand;
+import java.io.IOException;
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -24,6 +28,12 @@ public final class Bridge {
 
     private final MinecraftPlatform platform;
     private final CommandTree commands;
+    /**
+     * Groups that talked to a bot without being bound. It lives here rather than in the runtime because a
+     * {@code /qq reload} replaces the runtime, and the moment an operator reloads is exactly the moment they are
+     * about to run {@code /qq bind}.
+     */
+    private final UnboundGroups unboundGroups = new UnboundGroups();
     private volatile BridgeRuntime runtime;
     private volatile boolean started;
 
@@ -43,6 +53,7 @@ public final class Bridge {
         CommandTree tree = new CommandTree(root);
         root.addChild(new StatusCommand(this));
         root.addChild(new ReloadCommand(this));
+        root.addChild(new BindCommand(this));
         root.addChild(new TemplatesCommand(this));
         root.addChild(new TestCommand(this));
         root.addChild(new HelpCommand(tree));
@@ -74,10 +85,53 @@ public final class Bridge {
     /** What {@code /qq status} prints: one line per bot, then anything that went wrong. */
     public List<String> statusLines() {
         BridgeRuntime active = runtime;
+        List<String> lines = new ArrayList<>();
         if (active == null) {
-            return List.of("桥接未运行（服务器还没起来，或上一次 reload 失败）");
+            lines.add("桥接未运行（服务器还没起来，或上一次 reload 失败）");
+        } else {
+            lines.addAll(active.statusLines());
         }
-        return active.statusLines();
+        // The groups that talked to a bot without being bound. This is the answer to "where does the
+        // group-openid come from", and it is here because /qq status is the first thing an operator runs.
+        List<UnboundGroups.Seen> unbound = unboundGroups.all();
+        if (!unbound.isEmpty()) {
+            lines.add("收到过消息但没绑定的群（敲 /qq bind 绑最近那个，或 /qq bind <openid 前几位>）：");
+            for (UnboundGroups.Seen seen : unbound) {
+                lines.add("  " + seen.label());
+            }
+        }
+        return lines;
+    }
+
+    /**
+     * Binds a group that has already talked to a bot: writes it into the config and reloads, so the operator
+     * never has to open the file. Returns what to print.
+     *
+     * <p>Only groups in {@link UnboundGroups} can be bound this way, which is a safety property and not just a
+     * convenience: it means {@code /qq bind} can only ever attach a group that has actually sent this bot
+     * something, so a typo cannot wire the server's chat to a stranger's group.
+     */
+    public synchronized List<String> bindGroup(UnboundGroups.Seen target) {
+        Path path = BridgeConfig.configPath(platform.configDir());
+        String label;
+        try {
+            label = BridgeConfig.bindGroup(path, target.botId(), target.groupOpenid());
+        } catch (IOException e) {
+            return List.of("绑定失败：" + e.getMessage());
+        }
+        unboundGroups.forget(target.groupOpenid());
+        Log.info("把群 " + target.groupOpenid() + " 绑到 bot " + target.botId() + "，已写进 config.yml");
+        List<String> lines = new ArrayList<>();
+        lines.add("已绑定 " + label + "（写进 config.yml，旧文件备份在 config.yml.bak；"
+                + "要改显示名就编辑那个 label）");
+        lines.add(reload());
+        lines.addAll(statusLines());
+        return lines;
+    }
+
+    /** What {@code /qq bind} resolves its argument against. */
+    public UnboundGroups unboundGroups() {
+        return unboundGroups;
     }
 
     /** Queues one Minecraft event for every group that asked for it; does nothing before the first start. */
@@ -115,7 +169,7 @@ public final class Bridge {
     private BridgeRuntime replacement() {
         try {
             return BridgeRuntime.start(BridgeConfig.load(
-                    BridgeConfig.configPath(platform.configDir())), platform);
+                    BridgeConfig.configPath(platform.configDir())), platform, unboundGroups);
         } catch (Exception e) {
             Log.error("QQ 桥接读取配置失败；服务器照常运行", e);
             return null;

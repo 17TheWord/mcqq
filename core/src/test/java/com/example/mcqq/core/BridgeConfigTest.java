@@ -2,6 +2,7 @@ package com.example.mcqq.core;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
@@ -155,6 +156,58 @@ class BridgeConfigTest {
                 """);
 
         assertEquals("QQ_BOT_SECRET", config.bots().get(0).secretEnvironmentVariable());
+    }
+
+    @Test
+    void bindingAGroupWritesItIntoTheRightBotAndKeepsABackup() throws Exception {
+        Path file = dir.resolve("mcqq").resolve("config.yml");
+        Files.createDirectories(file.getParent());
+        Files.writeString(file, """
+                bots:
+                  - id: main
+                    app-id: "123456789"
+                    secret: "abc"
+                    groups:
+                      - group-openid: "G1"
+                        label: 主群
+                  - id: second
+                    app-id: "987654321"
+                    secret: "def"
+                    groups: []
+                """, StandardCharsets.UTF_8);
+
+        String label = BridgeConfig.bindGroup(file, "second", "NEWOPENID");
+
+        assertTrue(Files.exists(file.resolveSibling("config.yml.bak")), "改文件前必须留备份");
+        BridgeConfig config = BridgeConfig.parse(file);
+        BridgeConfig.Bot second = bot(config, "second");
+        assertEquals(List.of("NEWOPENID"), second.groups().stream()
+                .map(BridgeConfig.Group::groupOpenid).toList());
+        assertEquals(label, second.group("NEWOPENID").orElseThrow().label());
+        // 另一个 bot 一个字都不该动
+        assertEquals(List.of("G1"), bot(config, "main").groups().stream()
+                .map(BridgeConfig.Group::groupOpenid).toList());
+    }
+
+    @Test
+    void bindingTheSameGroupTwiceIsRefused() throws Exception {
+        Path file = dir.resolve("mcqq").resolve("config.yml");
+        Files.createDirectories(file.getParent());
+        Files.writeString(file, """
+                bots:
+                  - id: main
+                    app-id: "123456789"
+                    secret: "abc"
+                    groups:
+                      - group-openid: "G1"
+                """, StandardCharsets.UTF_8);
+
+        assertThrows(IOException.class, () -> BridgeConfig.bindGroup(file, "main", "G1"),
+                "已经绑过的群不该被绑第二次");
+    }
+
+    private static BridgeConfig.Bot bot(BridgeConfig config, String id) {
+        return config.bots().stream().filter(b -> b.id().equals(id)).findFirst().orElseThrow();
     }
 
     @Test

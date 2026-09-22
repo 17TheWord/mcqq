@@ -83,7 +83,7 @@ class CommandTreeTest {
         CommandTree tree = tree();
 
         assertEquals("qq", tree.root().name());
-        assertEquals(List.of("status", "reload", "templates", "test", "help"),
+        assertEquals(List.of("status", "reload", "bind", "templates", "test", "help"),
                 tree.root().children().stream().map(SubCommand::name).toList());
     }
 
@@ -115,7 +115,7 @@ class CommandTreeTest {
 
         assertEquals(2, lines.size(), lines.toString());
         assertTrue(lines.get(0).contains("没有子命令 nonsense"), lines.get(0));
-        assertTrue(lines.get(0).contains("status|reload|templates|test|help"), lines.get(0));
+        assertTrue(lines.get(0).contains("status|reload|bind|templates|test|help"), lines.get(0));
         assertEquals("mcqq", tree.resolve(List.of("nonsense")).permissionNode(),
                 "an unmatched argument resolves to the root, so a platform checks the root's permission");
     }
@@ -125,17 +125,18 @@ class CommandTreeTest {
         List<String> lines = tree().lines(List.of());
 
         assertEquals(1, lines.size(), lines.toString());
-        assertTrue(lines.get(0).contains("status|reload|templates|test|help"), lines.get(0));
+        assertTrue(lines.get(0).contains("status|reload|bind|templates|test|help"), lines.get(0));
     }
 
     @Test
     void helpIsGeneratedFromTheTree() {
         List<String> lines = tree().lines(List.of("help"));
 
-        assertEquals(6, lines.size(), lines.toString());
+        assertEquals(7, lines.size(), lines.toString());
         assertTrue(lines.get(0).startsWith("/qq — "), lines.get(0));
         assertTrue(lines.stream().anyMatch(line -> line.startsWith("/qq status — ")), lines.toString());
         assertTrue(lines.stream().anyMatch(line -> line.startsWith("/qq reload — ")), lines.toString());
+        assertTrue(lines.stream().anyMatch(line -> line.startsWith("/qq bind — ")), lines.toString());
         assertTrue(lines.stream().anyMatch(line -> line.startsWith("/qq help — ")), lines.toString());
     }
 
@@ -143,7 +144,7 @@ class CommandTreeTest {
     void completionOffersTheChildrenThatMatchWhatWasTyped() {
         CommandTree tree = tree();
 
-        assertEquals(List.of("status", "reload", "templates", "test", "help"), tree.completions(List.of()));
+        assertEquals(List.of("status", "reload", "bind", "templates", "test", "help"), tree.completions(List.of()));
         assertEquals(List.of("reload"), tree.completions(List.of("re")));
         assertEquals(List.of(), tree.completions(List.of("zzz")));
     }
@@ -181,7 +182,7 @@ class CommandTreeTest {
     void completionLeavesOutWhatTheCallerMayNotRun() {
         CommandTree tree = tree();
 
-        assertEquals(List.of("status", "reload", "templates", "test", "help"), tree.completions(new Recorder(true), List.of()));
+        assertEquals(List.of("status", "reload", "bind", "templates", "test", "help"), tree.completions(new Recorder(true), List.of()));
         assertEquals(List.of(), tree.completions(new Recorder(false), List.of()));
     }
 

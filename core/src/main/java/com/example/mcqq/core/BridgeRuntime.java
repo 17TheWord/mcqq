@@ -28,6 +28,7 @@ public final class BridgeRuntime implements AutoCloseable {
 
     private final MinecraftPlatform platform;
     private final BridgeConfig config;
+    private final UnboundGroups unbound;
     private final ExecutorService dispatcher;
     private final Bots bots = new Bots();
     /** Written from the startup thread and the bot connector, read by {@code /qq status} on a player's thread. */
@@ -36,9 +37,10 @@ public final class BridgeRuntime implements AutoCloseable {
 
     private volatile boolean connecting = true;
 
-    private BridgeRuntime(MinecraftPlatform platform, BridgeConfig config) {
+    private BridgeRuntime(MinecraftPlatform platform, BridgeConfig config, UnboundGroups unbound) {
         this.platform = platform;
         this.config = config;
+        this.unbound = unbound;
         // One task per dispatch, off the game's thread; the bus keeps each conversation's order itself.
         //
         // A cached pool rather than virtual threads, even though virtual threads fit this shape better:
@@ -55,9 +57,9 @@ public final class BridgeRuntime implements AutoCloseable {
     }
 
     /** Starts the bots for an already-parsed config. Nothing here throws into server startup. */
-    public static BridgeRuntime start(BridgeConfig config, MinecraftPlatform platform) {
+    public static BridgeRuntime start(BridgeConfig config, MinecraftPlatform platform, UnboundGroups unbound) {
         Log.debugEnabled(config.debug());
-        BridgeRuntime runtime = new BridgeRuntime(platform, config);
+        BridgeRuntime runtime = new BridgeRuntime(platform, config, unbound);
         runtime.start();
         return runtime;
     }
@@ -166,7 +168,7 @@ public final class BridgeRuntime implements AutoCloseable {
                 .intents(Intent.GROUP_AND_C2C_EVENT, Intent.GROUP_MEMBER_EVENT)
                 .build();
         QQBotClient bot = new QQBotClient(qq, new HttpTransport(qq), new EventBus(dispatcher::execute));
-        bot.handlers().register(new QqToMc(platform, config));
+        bot.handlers().register(new QqToMc(platform, config, botConfig.id(), unbound));
         bots.register(bot);
         registered.add(bot);
         Log.info("bridging bot " + botConfig.id() + " with " + botConfig.groups().size() + " group(s)");
