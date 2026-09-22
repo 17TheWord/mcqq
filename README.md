@@ -12,6 +12,8 @@ QQ 侧走 [qqbot-java-sdk](https://github.com/skiesworld/qqbot-java-sdk) 0.0.4 �
 | --- | --- |
 | [docs/PROGRESS.md](docs/PROGRESS.md) | **当前状态**：哪些已经真机验过、哪些还没、下一步。按轮次记录。 |
 | [docs/MULTIPLATFORM.md](docs/MULTIPLATFORM.md) | 为什么是这个形状：平台/版本矩阵的调研、路线取舍、每条结论的证据。 |
+| [docs/PLATFORM-PLAN.md](docs/PLATFORM-PLAN.md) | **平台重构规划**：拆 bukkit 一族（含 Spigot 的实测占比）、嵌套版本窗口、抽公共配置。 |
+| [docs/VERSIONS.md](docs/VERSIONS.md) | **加一个新 MC 版本要做什么**：三种情况、具体步骤、什么时候才需要加"版本窗口"子项目。 |
 | [docs/QUEQIAO-NOTES.md](docs/QUEQIAO-NOTES.md) | 从同作者的 QueQiao / QueQiaoTool 抄了什么、没抄什么、为什么。 |
 | [docs/TEMPLATES.md](docs/TEMPLATES.md) | 消息模板与占位符的设计（含第三方占位符库的评估）。 |
 | [THIRD-PARTY.md](THIRD-PARTY.md) | 打包进去的第三方组件与许可证。 |
@@ -19,13 +21,33 @@ QQ 侧走 [qqbot-java-sdk](https://github.com/skiesworld/qqbot-java-sdk) 0.0.4 �
 
 ## 工程结构：core + 每个平台一个 adapter
 
+**一个平台一个目录，平台下面按"版本窗口"再分一层** —— 同一个平台会有多个窗口（26.1 / 26.3 …），
+所以项目路径是 `平台:窗口`，产物名也带窗口（否则两个窗口会撞名）：
+
 ```
-core/      不认识 Minecraft 的那一半：常量、配置、模板、QQ 机器人、双向路由、命令树、以及平台实现的接缝。Java 21 字节码。
-fabric/    Fabric 适配：入口点、4 个事件监听、把 core 的命令树注册进 Brigadier、渲染文本进聊天栏。Java 25。
-neoforge/  NeoForge 适配：同一个形状，事件用 NeoForge 的事件总线、命令挂在 RegisterCommandsEvent 上。Java 25。
-forge/     Forge 适配：同形状，但 Forge 26.x 的事件 API 与 NeoForge 完全不同（每个事件自带静态 BUS）。Java 25。
-bukkit/    Paper 适配：JavaPlugin 入口、事件监听、把同一棵树接到 plugin.yml 的命令上。Java 25，不需要 MC 工具链。
+core/                          不认识 Minecraft 的那一半：常量、配置、模板、QQ 机器人、双向路由、命令树、接缝。Java 21 字节码
+bukkit-common/                 Bukkit 一族的共享部分（**编译对 spigot-api**）：平台基类、命令、JUL 日志、进服/退服/死亡监听
+fabric/fabric-26.1/            Fabric 适配（loom）：入口点、4 个事件监听、把命令树注册进 Brigadier。Java 25
+neoforge/neoforge-26.1/        NeoForge（moddev）：事件用 NeoForge 的事件总线、命令挂 RegisterCommandsEvent
+forge/forge-26.1/              Forge（ForgeGradle）：26.x 的事件 API 与 NeoForge 完全不同（每个事件自带静态 BUS）
+spigot/spigot-26.1/            Spigot 变体：入口、老聊天事件（AsyncPlayerChatEvent）、`§` 字符串渲染
+paper/paper-26.1/              Paper 变体：入口、新聊天事件（AsyncChatEvent）、Adventure 渲染 + Folia 调度
 ```
+
+窗口名用**窗口起点**（`fabric-26.1` 覆盖 `[26.1, 26.2]`，范围写在描述符里）。
+产物：`mc-qq-fabric-26.1-<版本>.jar` / `-neoforge-26.1-` / `-forge-26.1-` / `-spigot-26.1-` / `-paper-26.1-`。
+
+**Bukkit 一族装哪个**：Paper 系（含 Purpur，以及 **Folia**）装 `paper` 那份；Spigot / CraftBukkit 装 `spigot` 那份。
+**装错了会明确告诉你**：spigot 那份在 Paper 上会打印一句原因并停用自己（反过来也一样），
+不会静默地少转发或者重复转发。
+加一个新窗口 = 复制一个窗口目录 + 在 `platforms.yml` 的矩阵里加一行。
+**`bukkit-common/` 是唯一一个"跨平台"的模块**：它编译对 spigot-api（Bukkit 一族的最低公分母），
+Paper 变体与 Spigot 变体都依赖它，各自只补自己那点差异（Paper 用 Adventure 渲染 + Folia 调度，
+Spigot 直接发 `§` 字符串）。
+
+**公共的东西各只有一处**：版本事实（含描述符的显示名/作者/许可证/链接）在 `gradle.properties`；
+平台清单在 `platforms.yml`；打包与 relocate（打进去哪些库、改哪些名、塞哪两个许可文件）在根 `build.gradle.kts`。
+所以每个平台模块只剩"自己的名字 + 自己的 API 依赖 + 自己的描述符"。
 
 ⚠️ **Forge 默认不进本地构建**：它的工具链（ForgeGradle 的 mavenizer）在**配置阶段**就要下载，而 Gradle 会配置
 所有 include 的项目 —— 只要它在列表里，网速差的机器上**任何** `./gradlew` 调用都会失败（连另外三个平台也编不了）。
@@ -104,11 +126,11 @@ CI runner 的网络没问题，所以两个工作流都带了这个参数。细�
 
 ```bash
 ./gradlew build
-# 产物：
-#   fabric/build/libs/mc-qq-<版本>.jar            → Fabric 服务端 mods/
-#   neoforge/build/libs/mc-qq-neoforge-<版本>.jar → NeoForge 服务端 mods/
-#   forge/build/libs/mc-qq-forge-<版本>.jar       → Forge 服务端 mods/（见下：暂时不在构建里）
-#   bukkit/build/libs/mc-qq-bukkit-<版本>.jar     → Paper 系服务端 plugins/
+# 产物（名字里带平台与窗口）：
+#   fabric/fabric-26.1/build/libs/mc-qq-fabric-26.1-<版本>.jar      → Fabric 服务端 mods/
+#   neoforge/neoforge-26.1/build/libs/mc-qq-neoforge-26.1-<版本>.jar → NeoForge 服务端 mods/
+#   forge/forge-26.1/build/libs/mc-qq-forge-26.1-<版本>.jar          → Forge 服务端 mods/（见下：默认不在构建里）
+#   paper/paper-26.1/build/libs/mc-qq-paper-26.1-<版本>.jar          → Paper 系服务端 plugins/
 # 同目录的 -dev.jar 是不带任何依赖的瘦 jar，不要用它。
 # 另有 core/build/libs/mc-qq-core-<版本>.jar，那是内部产物，不需要单独安装。
 ```
@@ -266,7 +288,7 @@ Fabric 侧走 Brigadier（带补全），Paper 侧走 `plugin.yml` 的命令 + �
 
 ## 开发用的测试服（可以删）
 
-`bukkit/run`、`bukkit/run-folia`、`fabric/run`、`fabric/run-prod`、`neoforge/run` 是验证用的服务端目录
+`paper/paper-26.1/run`、`fabric/fabric-26.1/run`、`neoforge/neoforge-26.1/run` 是验证用的服务端目录
 （合计约 800M），都在 `.gitignore` 里、不进仓库。它们是**验证环境**：留着，下次改完直接起服复验，不用重新下载
 （Mojang 那边现在限速）。要腾空间可以直接删整个目录 —— 代价是下次要重新拉服务端与依赖。
 最可以删的是 `bukkit/run-folia`（Folia 已经验过，它的缓存还是从 `bukkit/run` 复制过去的）。

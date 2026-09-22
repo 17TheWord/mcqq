@@ -199,7 +199,8 @@ public final class BridgeRuntime implements AutoCloseable {
     public List<String> statusLines() {        List<String> lines = new ArrayList<>();
         lines.add("平台 " + platform.label());
         if (config.bots().isEmpty()) {
-            lines.add("配置里没有 bot：编辑 " + Constants.MOD_ID + "/config.yml 后 /qq reload");
+            lines.add("配置里没有 bot：编辑 " + platform.configDir().resolve(Constants.MOD_ID).resolve("config.yml")
+                    + " 后 /qq reload");
         }
         for (BridgeConfig.Bot botConfig : config.bots()) {
             QQBotClient bot = bots.get(botConfig.appId()).orElse(null);

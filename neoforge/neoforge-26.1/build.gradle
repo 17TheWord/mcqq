@@ -1,0 +1,77 @@
+// This module is Groovy on purpose. ModDevGradle's documentation only publishes Groovy examples, so copying
+// upstream verbatim means the next NeoForge bump is a diff against upstream rather than a translation of it.
+// Every other project here is Kotlin DSL; Gradle lets each project choose.
+plugins {
+    id 'java'
+    id 'net.neoforged.moddev'
+    id 'com.gradleup.shadow'
+}
+
+base {
+    // 名字里带平台与窗口：同一个平台会有多个窗口，只写版本号会撞名。
+    archivesName = "${archives_base_name}-neoforge-26.1"
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+}
+
+repositories {
+    // ModDevGradle resolves the NeoForge artifacts itself, but naming the repository keeps it obvious.
+    maven {
+        name = 'NeoForged'
+        url = 'https://maven.neoforged.net/releases'
+    }
+}
+
+neoForge {
+    version = neoforge_version
+
+    runs {
+        server {
+            server()
+        }
+    }
+
+    // Which source set is the mod. Without this the dev runs would start a server with no mod in it.
+    // The name here has to be the modId: see `mod_id` in gradle.properties for why it is not the project name.
+    // To test the *packaged* jar instead (run/mods/…), comment this block out — otherwise the same modId is
+    // discovered twice, once from here and once from the jar.
+    mods {
+        "${mod_id}" {
+            sourceSet sourceSets.main
+        }
+    }
+}
+
+dependencies {
+    // `add` rather than `bundled ...`: a local variable of that name would shadow the dependency handler's
+    // dynamic method, and Groovy would then try to call the Configuration itself.
+    add('bundled', project(':core'))
+}
+
+tasks.named('jar') { archiveClassifier = 'dev' }
+
+tasks.named('processResources') {
+    inputs.property 'version', version
+    filesMatching('META-INF/neoforge.mods.toml') {
+        expand(
+                version: version,
+                mod_id: mod_id,
+                mod_name: mod_name,
+                mod_authors: mod_authors,
+                mod_license: mod_license,
+                mod_url: mod_url,
+                mod_description: mod_description,
+                neoforge_version: neoforge_version,
+                neoforge_loader_version_range: neoforge_loader_version_range,
+                minecraft_version_range: minecraft_version_range)
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 25
+}

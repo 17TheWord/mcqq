@@ -74,10 +74,11 @@ jobs:
           # 用 printf 拼，不用 heredoc 也不用 jq：heredoc 的结束标记要求顶格，会被 YAML 块标量的缩进破坏；
           # jq 是又一个要赌 runner 上有没有的东西，而 printf 到处都有、本地也能照着跑一遍。
           matrix=$(printf '{"include":['\
-          '{"name":"fabric","project":":fabric","jar":"fabric/build/libs/mc-qq-%s.jar","loaders":"fabric","properties":""},'\
-          '{"name":"neoforge","project":":neoforge","jar":"neoforge/build/libs/mc-qq-neoforge-%s.jar","loaders":"neoforge","properties":""},'\
-          '{"name":"forge","project":":forge","jar":"forge/build/libs/mc-qq-forge-%s.jar","loaders":"forge","properties":"-PwithForge=true"},'\
-          '{"name":"paper","project":":bukkit","jar":"bukkit/build/libs/mc-qq-bukkit-%s.jar","loaders":"paper folia","properties":""}'\
-          ']}' "$VERSION" "$VERSION" "$VERSION" "$VERSION")
+          '{"name":"fabric-26.1","project":":fabric:fabric-26.1","jar":"fabric/fabric-26.1/build/libs/mc-qq-fabric-26.1-%s.jar","loaders":"fabric","properties":""},'\
+          '{"name":"neoforge-26.1","project":":neoforge:neoforge-26.1","jar":"neoforge/neoforge-26.1/build/libs/mc-qq-neoforge-26.1-%s.jar","loaders":"neoforge","properties":""},'\
+          '{"name":"forge-26.1","project":":forge:forge-26.1","jar":"forge/forge-26.1/build/libs/mc-qq-forge-26.1-%s.jar","loaders":"forge","properties":"-PwithForge=true"},'\
+          '{"name":"spigot-26.1","project":":spigot:spigot-26.1","jar":"spigot/spigot-26.1/build/libs/mc-qq-spigot-26.1-%s.jar","loaders":"spigot","properties":""},'\
+          '{"name":"paper-26.1","project":":paper:paper-26.1","jar":"paper/paper-26.1/build/libs/mc-qq-paper-26.1-%s.jar","loaders":"paper folia","properties":""}'\
+          ']}' "$VERSION" "$VERSION" "$VERSION" "$VERSION" "$VERSION")
           echo "$matrix"
           echo "matrix=$matrix" >> $GITHUB_OUTPUT

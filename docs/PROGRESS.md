@@ -3,7 +3,71 @@
 > 2026-09-21 之后的补充都写在这里，最新的在最前面。历史轮次保留原文（它们记录的是当时的判断，
 > 里面的 `mc_qq`、`config/mc-qq/` 等字样是**当时**的事实，不是现在的）。
 
-## runner 钉到 ubuntu-26.04（2026-09-22，最新）
+## 平台重构第 4 步：抽公共配置（2026-09-22，最新）
+
+两块：
+
+* **描述符的公共字段**（`mod_name` / `mod_authors` / `mod_license` / `mod_url` / `mod_description`，加上已有的
+  `mod_id`）进 `gradle.properties`；五个描述符改用 `${...}`，各自 `processResources` 一次
+  `expand(resourceFacts)` 填进去。平台的差异（`plugin.yml` 那句"这份是 Paper 系"）仍留在各自描述符里。
+* **打包与 relocate 收到根构建**：`bundled` 配置、SDK/SnakeYAML 依赖、shadowJar 的改名列表与排除项、
+  LICENSE/THIRD-PARTY 注入 —— 原来在五个平台模块里各写一遍，现在在根构建的
+  `plugins.withId("com.gradleup.shadow")` 块里一次。各模块只剩 `add("bundled", project(":core"))`。
+  **没有新模块、没用 `buildSrc`**：根构建的 `subprojects` 块本来就在子项目脚本之前跑。
+  ⚠️ 副作用：Kotlin 模块里的 `bundled(...)` 类型安全访问器失效（配置不再由本模块创建）→ 改用 `add(...)`。
+
+**验证**：`clean build` 全绿（31 个任务）；四个能构建的 jar 里描述符**全部展开**（`grep -c '\${'` = 0），
+字段值正确（`id: mcqq` / `name: MC ↔ QQ Bot` / `authors: [SkiesWorld]` / `license: MIT` / 中文描述），
+`LICENSE` + `THIRD-PARTY.md` 仍在每个 jar 里 ✓。
+⚠️ forge 的描述符展开没单独验（它不在本机构建里）；机制与 neoforge 完全相同。
+
+**踩到的坑**：Kotlin DSL 里 `tasks.processResources { property("mod_id") }` 会去 **task** 上找属性 ✗
+（Groovy 会回落到 project，所以那两份没事）→ 把 `resourceFacts` 提到顶层再 `expand`。
+**这与"`javaRelease` 要提到顶层"是同一个坑，第二次了。**
+
+## 平台重构第 2、3 步：bukkit-common + spigot 变体（2026-09-22）
+
+* **第 2 步 `bukkit-common/`**：编译对 **spigot-api**（Bukkit 一族最低公分母），5 个共享类；
+  paper 变体从 6 个文件削到 3 个。发送消息做成钩子 `sendLine(CommandSender, String)`。
+  **抽共享模块直接暴露两个真实差异**：`Server.getMinecraftVersion()` 是 Paper 独有的（编译器抓的）；
+  spigot-api 不带 Adventure（只有老的 `bungeecord-chat`）。
+  **验证**：`clean build` 全绿 + Paper 26.2 真机（命令全通）+ jar 里 5 个 common 类 + 3 个 paper 类。
+* **第 3 步 `spigot/spigot-26.1/`**：3 个文件（入口 + `AsyncPlayerChatEvent` 监听 + `§` 字符串渲染）。
+  **编译通过**（证明老聊天事件在 spigot-api 里确实存在）。
+  **拒绝路径实测**：装到 Paper 上 → `这个 jar 是给 Spigot / CraftBukkit 的……插件已停用` + 停用自己 ✓
+  —— 这条同时把"Paper 是否仍触发老事件"的未知绕过去了（设计上不让混用发生）。
+  ⚠️ **未验**：从没在真 Spigot 服务端上跑过（要 BuildTools 编译，本机网速不允许）。
+* **矩阵现在是 5 格**（fabric / neoforge / forge / spigot / paper），实测 JSON 合法。
+* **又一次同类教训**：往矩阵里插一行时又漏了行尾的 `'`（这已经是第三次了）—— 仍然是"切出来跑一遍"抓到的。
+  **以后改这种多行 printf 串，别手拼，直接整块重写 + 立刻跑。**
+
+## 平台重构第 1 步：目录改成「平台/窗口」（2026-09-22）
+
+用户拍板了 `docs/PLATFORM-PLAN.md` 里的四个问题：**拆 2 个（spigot + paper）**、**做 `bukkit-common`**、
+**命名用完全体 `fabric/fabric-26.1`**、**不上 version catalog**。第 1 步（纯搬家）已完成并验证。
+
+```
+core/                        → 不变
+fabric/fabric-26.1/          ← 原 fabric/
+neoforge/neoforge-26.1/      ← 原 neoforge/
+forge/forge-26.1/            ← 原 forge/
+paper/paper-26.1/            ← 原 bukkit/（Paper 系；Spigot 是另一个平台目录）
+```
+
+* `settings.gradle.kts` 用 `include("平台:窗口")`（项目路径 `:fabric:fabric-26.1`）；
+* **产物名带上平台与窗口**：`mc-qq-fabric-26.1-0.1.0.jar` / `-neoforge-26.1-` / `-forge-26.1-` / `-paper-26.1-`
+  —— 不加窗口的话，同一个平台的两个窗口会撞名（用户自己点出来的）；
+* `platforms.yml` 的矩阵与 `release.yml` 的附件路径同步更新，矩阵**每个窗口一格 job**；
+* 顺带修掉一句错消息：`/qq status` 里显示的配置路径少了 `config/` 前缀（早先我改 `Constants.MOD_ID` 时引入的），
+  现在直接用平台给的真实路径（Paper 上显示 `plugins\mcqq\config.yml`）。
+
+**验证**：`clean build` 全绿（47 测试）+ Paper 26.2 真机（`平台 paper-26.2`、`/qq status` 与 `/qq help` 正常）。
+
+**搬家时踩的**：改 `platforms.yml` 矩阵那几行时，我用 python 拼字符串把行尾的 `'` 拼到了下一行行首、
+又漏了项之间的逗号 —— 两次都是"切出来跑一遍"抓到的（JSON 解析直接报错）。**这类多行 shell 字符串，
+手写一次就要跑一次。**
+
+## runner 钉到 ubuntu-26.04（2026-09-22）
 
 GitHub 提示 "`ubuntu-latest` 将在 2026-10-19 起迁移到 Ubuntu 26"。用户要求改用 26。
 

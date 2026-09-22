@@ -4,3 +4,7 @@ run/
 logs/
 *.log
 .idea/
+# 测试服目录：`run/` 只匹配名字正好是 run 的目录，run-prod / run-folia 得单独写，
+# 否则一次 `git add -A` 就会把几百 MB 的服务端推进仓库。
+run-prod/
+run-folia/

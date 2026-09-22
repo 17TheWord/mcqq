@@ -25,11 +25,41 @@ subprojects {
         maven("https://maven.fabricmc.net/") { name = "Fabric" }
     }
 
-    // The shipped jars bundle Apache-2.0 libraries (the SDK, OkHttp, Gson, SnakeYAML, Kotlin), and Apache-2.0
-    // asks that whoever receives them also receives a copy of the licence and the notices. Both files go in
-    // every platform's jar, which is the only artefact a server admin ever sees.
+    /**
+     * Everything a platform jar needs in common, in one place.
+     *
+     * The contract every platform shares: **one jar dropped into `mods/` or `plugins/` must be enough**, so the
+     * dependencies are embedded and renamed (relocated) — the SDK, and the two libraries the game also ships in
+     * other versions. That block used to be copied into all five platform build files; what stays there is only
+     * what is genuinely per-platform (the archives name, the API dependency, the toolchain, the descriptor).
+     *
+     * The Apache-2.0 notice files go in for the same reason: the jar is the only artefact an admin ever sees.
+     */
     plugins.withId("com.gradleup.shadow") {
+        val bundled = configurations.create("bundled") { isCanBeResolved = true }
+        configurations.named("implementation") { extendsFrom(bundled) }
+        val shadeGroup = "${property("maven_group")}.shaded"
+        dependencies {
+            add("bundled", "io.github.skiesworld:qqbot-java-sdk:${property("qqbot_sdk_version")}")
+            add("bundled", "org.yaml:snakeyaml:${property("snakeyaml_version")}")
+        }
         tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar") {
+            configurations = listOf(bundled)
+            archiveClassifier.set("")
+            // A library that the game itself ships (gson, snakeyaml) or that other mods commonly bundle
+            // (kotlin) has to be renamed, or two copies of the same package would fight over one classpath.
+            listOf(
+                "io.github.skiesworld.qqbot",
+                "okhttp3",
+                "okio",
+                "com.google.gson",
+                "org.yaml.snakeyaml",
+                "kotlin",
+            ).forEach { pkg -> relocate(pkg, "$shadeGroup.$pkg") }
+            // slf4j is provided by the game and must stay unrelocated, so it also must not be embedded.
+            exclude("org/slf4j/**")
+            exclude("META-INF/services/javax.annotation.processing.Processor")
+            duplicatesStrategy = DuplicatesStrategy.EXCLUDE
             from(rootProject.file("LICENSE")) { into("") }
             from(rootProject.file("THIRD-PARTY.md")) { into("") }
         }

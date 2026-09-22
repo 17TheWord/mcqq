@@ -75,10 +75,11 @@ jobs:
         with:
           name: mc-qq-${{ needs.platforms.outputs.version }}
           path: |
-            fabric/build/libs/mc-qq-*.jar
-            neoforge/build/libs/mc-qq-*.jar
-            forge/build/libs/mc-qq-*.jar
-            bukkit/build/libs/mc-qq-*.jar
+            fabric/fabric-26.1/build/libs/mc-qq-*.jar
+            neoforge/neoforge-26.1/build/libs/mc-qq-*.jar
+            forge/forge-26.1/build/libs/mc-qq-*.jar
+            spigot/spigot-26.1/build/libs/mc-qq-*.jar
+            paper/paper-26.1/build/libs/mc-qq-*.jar
           if-no-files-found: error
 
       - name: Create the release and attach the jars
@@ -87,10 +88,11 @@ jobs:
         shell: bash
         run: |
           JARS=$(printf '%s ' \
-            "fabric/build/libs/mc-qq-${{ needs.platforms.outputs.version }}.jar" \
-            "neoforge/build/libs/mc-qq-neoforge-${{ needs.platforms.outputs.version }}.jar" \
-            "forge/build/libs/mc-qq-forge-${{ needs.platforms.outputs.version }}.jar" \
-            "bukkit/build/libs/mc-qq-bukkit-${{ needs.platforms.outputs.version }}.jar")
+            "fabric/fabric-26.1/build/libs/mc-qq-fabric-26.1-${{ needs.platforms.outputs.version }}.jar" \
+            "neoforge/neoforge-26.1/build/libs/mc-qq-neoforge-26.1-${{ needs.platforms.outputs.version }}.jar" \
+            "forge/forge-26.1/build/libs/mc-qq-forge-26.1-${{ needs.platforms.outputs.version }}.jar" \
+            "spigot/spigot-26.1/build/libs/mc-qq-spigot-26.1-${{ needs.platforms.outputs.version }}.jar" \
+            "paper/paper-26.1/build/libs/mc-qq-paper-26.1-${{ needs.platforms.outputs.version }}.jar")
           if [ "${{ steps.tag.outputs.prerelease }}" = "true" ]; then
             gh release create "${GITHUB_REF_NAME}" --generate-notes --prerelease $JARS
           else

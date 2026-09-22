@@ -1,0 +1,67 @@
+// Groovy, like the NeoForge module: ForgeGradle's own docs are Groovy, so this stays a copy of the official
+// MDK shape rather than a translation of it. The MDK used here is the 26.1.2-64.1.3 one.
+plugins {
+    id 'java'
+    id 'net.minecraftforge.gradle'
+    id 'com.gradleup.shadow'
+}
+
+base {
+    // 名字里带平台与窗口：同一个平台会有多个窗口，只写版本号会撞名。
+    archivesName = "${archives_base_name}-forge-26.1"
+}
+
+// Mojang ships Java 25 in 26.1+, so a mod targets 25. core stays at 21 bytecode; only the adapters are 25.
+java.toolchain.languageVersion = JavaLanguageVersion.of(25)
+
+minecraft {
+    runs {
+        configureEach {
+            workingDir = layout.projectDirectory.dir('run')
+        }
+        register('server') {
+            args '--nogui'
+        }
+    }
+}
+
+repositories {
+    minecraft.mavenizer(it)
+    maven fg.forgeMaven
+    maven fg.minecraftLibsMaven
+    mavenCentral()
+}
+
+dependencies {
+    // `add` rather than `bundled ...`: a local variable of that name would shadow the dependency handler's
+    // dynamic method, and Groovy would then try to call the Configuration itself.
+    add('bundled', project(':core'))
+
+    // Forge itself is provided by the server, so it is a normal dependency, not a bundled one.
+    implementation minecraft.dependency("net.minecraftforge:forge:${forge_version}")
+    annotationProcessor 'net.minecraftforge:eventbus-validator:7.0.5'
+}
+
+tasks.named('jar') { archiveClassifier = 'dev' }
+
+tasks.named('processResources') {
+    inputs.property 'version', version
+    filesMatching(['META-INF/mods.toml', 'pack.mcmeta']) {
+        expand(
+                version: version,
+                mod_id: mod_id,
+                mod_name: mod_name,
+                mod_authors: mod_authors,
+                mod_license: mod_license,
+                mod_url: mod_url,
+                mod_description: mod_description,
+                forge_version: forge_version,
+                forge_loader_version_range: forge_loader_version_range,
+                minecraft_version_range: minecraft_version_range)
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 25
+}

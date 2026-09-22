@@ -27,6 +27,7 @@ Apache-2.0 要求分发时附上许可证副本并保留 NOTICE，所以 `LICENS
 | Brigadier | 1.3.10 | MIT | 只在 core 里 `compileOnly`；游戏自带 |
 | Fabric API | 0.155.3+26.1.2 | Apache-2.0 | Fabric 侧的前置，服主自己装 |
 | Paper / Folia / NeoForge API | 26.x | 各自的许可证 | 编译期依赖，运行时由服务端提供 |
+| Spigot API | 26.1.2-R0.1-SNAPSHOT | GPL-3.0 | 同上；`bukkit-common` 编译对它是为了取 Bukkit 一族的最低公分母 |
 
 ## 为什么 relocate
 

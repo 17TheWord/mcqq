@@ -15,10 +15,15 @@ rootProject.name = "mc-qq"
 
 // `core` holds everything that does not know Minecraft exists; each other project is one platform's
 // adapter. Adding a platform means adding a directory here, not touching `core`.
+// 一个平台可以有多个"版本窗口"，所以项目路径是 `平台:窗口`（目录同名）。
+// 窗口名用**窗口起点**：fabric-26.1 覆盖 [26.1, 26.2]，范围写在描述符里。
 include("core")
-include("fabric")
-include("bukkit")
-include("neoforge")
+// Bukkit 一族的共享部分（编译对 spigot-api）：paper / 以后的 spigot 都依赖它。
+include("bukkit-common")
+include("fabric:fabric-26.1")
+include("paper:paper-26.1")
+include("spigot:spigot-26.1")
+include("neoforge:neoforge-26.1")
 /**
  * Forge 是**按需**加进来的，默认不加。
  *
@@ -30,5 +35,5 @@ include("neoforge")
  */
 val withForge = startParameter.projectProperties["withForge"].toBoolean()
 if (withForge) {
-    include("forge")
+    include("forge:forge-26.1")
 }
