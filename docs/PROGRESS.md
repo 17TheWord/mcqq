@@ -3,6 +3,62 @@
 > 2026-09-21 之后的补充都写在这里，最新的在最前面。历史轮次保留原文（它们记录的是当时的判断，
 > 里面的 `mc_qq`、`config/mc-qq/` 等字样是**当时**的事实，不是现在的）。
 
+## 修：CI 上矩阵里的版本号是空的（2026-09-22，最新）
+
+用户在 GitHub 上跑 test 时报：
+
+```
+Error: No files were found with the provided path: fabric/build/libs/mc-qq-.jar.
+```
+
+**`mc-qq-.jar` —— 版本号是空的。** 根因：矩阵那一步用 shell 变量 `$VERSION`，而它是**上一步**（另一个 shell 进程）
+设的 —— CI 里**跨步骤的 shell 变量不存在**，只有 `$GITHUB_OUTPUT` / `env:` 能传值。
+（讽刺的是我给这段代码写的注释里就说了要小心 heredoc 和 jq，却没注意变量作用域。）
+
+修法：
+
+```yaml
+      - name: Generate the platform matrix
+        id: matrix
+        env:
+          VERSION: ${{ steps.version.outputs.version }}   # ← 从上游步骤的 output 注入
+        run: |
+          matrix=$(printf '...' "$VERSION" ...)
+```
+
+**我的验证方式也有问题**：上次我是显式 `VERSION=0.1.0 bash step.sh` 跑的，正好把这个接线错误掩盖了。
+现在的做法是**按 CI 的分步方式模拟** —— 两步分别在独立 shell 里跑，中间只通过一个真的 `$GITHUB_OUTPUT`
+文件传递，再把它当作 env 注入第二步：
+
+```bash
+GITHUB_OUTPUT=/tmp/out1 bash ci-step1.sh        # 第一步
+V=$(grep '^version=' /tmp/out1 | cut -d= -f2)   # CI 会做这件事
+VERSION="$V" GITHUB_OUTPUT=/tmp/out2 bash ci-step2.sh   # 第二步
+python -c "json.loads(...)"                     # 校验 jar 路径里真的有版本号
+```
+
+改完实测：矩阵四格的 jar 路径都带 `0.1.0` ✓。
+
+**顺手扫了一遍同类风险**：其余 `run:` 块里的 shell 变量（`$JARS`、`$GITHUB_REF_NAME`）都在同一步内定义，
+或者来自 GitHub 自带的环境变量 ✓。
+
+### 顺带：action 版本落后 1–3 个大版本
+
+用户日志里的 `Node 20 is being deprecated` 是**动作自己的运行时**在报（`upload-artifact@v4` 声明 node20，
+GitHub 用 Node 24 跑并给出提示），不是我们的问题 —— 但说明版本该升了。查了各仓库最新版后统一升级：
+
+| 动作 | 原 | 现 |
+| --- | --- | --- |
+| actions/checkout | v6 | **v7** |
+| actions/setup-java | v5 | **v6** |
+| actions/cache | v5 | **v6** |
+| actions/upload-artifact | v4 | **v7** |
+| actions/download-artifact | v4 | **v8** |
+| gradle/actions/setup-gradle | v6 | v6（已是最新） |
+
+（这些大版本主要是换 Node 运行时；我们用的输入名 `path` / `name` / `if-no-files-found` / `java-version` /
+`distribution` 都是长期稳定的那几个。）
+
 ## 矩阵抽成单一出处（2026-09-22，最新）
 
 用户指出：平台清单散在三个地方（test 的 artifact 路径、release 的矩阵 JSON、release 的附件），

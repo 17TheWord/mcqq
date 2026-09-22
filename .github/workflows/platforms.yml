@@ -35,7 +35,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       # 版本号与"发布时声称的游戏窗口"都从 gradle.properties 读 —— 那里是它们唯一的出处
       # （描述符里的范围也由 Gradle 从同一份文件 expand 出来）。
@@ -60,6 +60,10 @@ jobs:
       - name: Generate the platform matrix
         id: matrix
         shell: bash
+        # ⚠️ 版本号必须这样从**上一步的 output** 注入，不能用 shell 变量 $VERSION ——
+        # 上一步是另一个 shell 进程，变量不会传过来（第一次就踩了这个：矩阵里 %s 全成了空串）。
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           # 用 printf 拼，不用 heredoc 也不用 jq：heredoc 的结束标记要求顶格，会被 YAML 块标量的缩进破坏；
           # jq 是又一个要赌 runner 上有没有的东西，而 printf 到处都有、本地也能照着跑一遍。

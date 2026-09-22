@@ -39,7 +39,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup Java & Gradle
         uses: ./.github/actions/set-java
@@ -71,7 +71,7 @@ jobs:
         run: ./gradlew clean build -PwithForge=true --stacktrace
 
       - name: Keep the jars
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mc-qq-${{ needs.platforms.outputs.version }}
           path: |
@@ -110,7 +110,7 @@ jobs:
     steps:
       # 这个 job 不 checkout、不装 Gradle：只用上一个 job 传过来的产物与矩阵里的元数据。
       - name: Fetch the jars built by the previous job
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mc-qq-${{ needs.platforms.outputs.version }}
           path: jars
