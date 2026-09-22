@@ -1,5 +1,5 @@
 name: Platform matrix
-description: 读 gradle.properties 的版本事实，拼出平台矩阵（喂给 strategy.matrix）
+description: 读 gradle.properties 的版本事实，按输入的筛选条件拼出平台矩阵（喂给 strategy.matrix）
 
 # 这是"有哪些平台、每个 jar 叫什么、发布时算什么 loader、覆盖哪些游戏版本"的唯一出处。
 #
@@ -9,6 +9,22 @@ description: 读 gradle.properties 的版本事实，拼出平台矩阵（喂给
 # （`.github/workflows/platforms.yml`），原因见那个文件。
 #
 # ⚠️ 本 action 假定仓库**已经 checkout** 到当前工作目录（它要读 gradle.properties）。
+
+# 寻址格式：矩阵每一行的名字是 **「平台-窗口起点」**（`fabric-26.1`、`forge-1.20.1`），
+# 下面的筛选就是按它拆的 —— 这两个输入都按这个格式填。
+inputs:
+  platforms:
+    description: >-
+      要构建哪些平台，逗号分隔。每一项可以是平台名（fabric / neoforge / forge / paper / spigot），
+      也可以是完整窗口名（forge-1.20.1）。留空 = 全部。
+    required: false
+    default: ""
+  versions:
+    description: >-
+      要构建哪些 MC 窗口，逗号分隔（26.1 / 1.20.1）。留空 = 全部。
+      与 platforms 是"与"的关系，所以 forge + 1.20.1 只会得到 forge-1.20.1。
+    required: false
+    default: ""
 
 outputs:
   version:
@@ -35,17 +51,6 @@ runs:
         echo "v1_20_1=$V1_20_1" >> $GITHUB_OUTPUT
         echo "version=$VERSION  26.1=$V26_1  1.20.1=$V1_20_1"
 
-    # 每行是：矩阵里的名字、Gradle 子项目、产出的 jar（仓库相对路径）、发布时的 loaders、
-    # 这个窗口在 Modrinth/CurseForge 上声称的游戏版本、以及这个平台需要的额外 Gradle 参数。
-    #
-    # 那个 properties 字段是必要的：Forge 在 settings.gradle.kts 里是**按需 include** 的
-    # （它的工具链在配置阶段下载），而 Gradle 会配置所有 include 的项目 —— 所以只有 forge 那两格
-    # 才该带 -PwithForge=true，否则每格都要白下一遍 Forge 工具链。
-    #
-    # loaders 只写真跑过的：Bukkit 那份是 Paper 与 Folia（Spigot 明确不支持，插件会自己停用并说明）。
-    #
-    # ⚠️ game-versions 是**每个窗口一份**（`publish_game_versions_26_1` / `_1_20_1`），不能共用 ——
-    # 26.x 的 jar 装不到 1.20.1 上。
     - name: Generate the platform matrix
       id: matrix
       shell: bash
@@ -55,19 +60,70 @@ runs:
         VERSION: ${{ steps.version.outputs.version }}
         V26_1: ${{ steps.version.outputs.v26_1 }}
         V1_20_1: ${{ steps.version.outputs.v1_20_1 }}
+        WANT_PLATFORMS: ${{ inputs.platforms }}
+        WANT_VERSIONS: ${{ inputs.versions }}
       run: |
-        # 用 printf 拼，不用 heredoc 也不用 jq：heredoc 的结束标记要求顶格，会被 YAML 块标量的缩进破坏；
-        # jq 是又一个要赌 runner 上有没有的东西，而 printf 到处都有、本地也能照着跑一遍。
-        # ⚠️ 占位符是**按行出现顺序**消费的，加一格/改字段都要数一遍；加完立刻在本地跑一次看 JSON 能不能解析。
-        matrix=$(printf '{"include":['\
-        '{"name":"fabric-26.1","project":":fabric:fabric-26.1","jar":"fabric/fabric-26.1/build/libs/mc-qq-fabric-26.1-%s.jar","loaders":"fabric","game-versions":"%s","properties":""},'\
-        '{"name":"neoforge-26.1","project":":neoforge:neoforge-26.1","jar":"neoforge/neoforge-26.1/build/libs/mc-qq-neoforge-26.1-%s.jar","loaders":"neoforge","game-versions":"%s","properties":""},'\
-        '{"name":"forge-26.1","project":":forge:forge-26.1","jar":"forge/forge-26.1/build/libs/mc-qq-forge-26.1-%s.jar","loaders":"forge","game-versions":"%s","properties":"-PwithForge=true"},'\
-        '{"name":"spigot-26.1","project":":spigot:spigot-26.1","jar":"spigot/spigot-26.1/build/libs/mc-qq-spigot-26.1-%s.jar","loaders":"spigot","game-versions":"%s","properties":""},'\
-        '{"name":"paper-26.1","project":":paper:paper-26.1","jar":"paper/paper-26.1/build/libs/mc-qq-paper-26.1-%s.jar","loaders":"paper folia","game-versions":"%s","properties":""},'\
-        '{"name":"forge-1.20.1","project":":forge:forge-1.20.1","jar":"forge/forge-1.20.1/build/libs/mc-qq-forge-1.20.1-%s.jar","loaders":"forge","game-versions":"%s","properties":"-PwithForge=true"}'\
-        ']}' \
-        "$VERSION" "$V26_1" "$VERSION" "$V26_1" "$VERSION" "$V26_1" \
-        "$VERSION" "$V26_1" "$VERSION" "$V26_1" "$VERSION" "$V1_20_1")
+        # 空格和大小写都不该让筛选失灵。
+        WANT_PLATFORMS=$(echo "$WANT_PLATFORMS" | tr -d ' ' | tr 'A-Z' 'a-z')
+        WANT_VERSIONS=$(echo "$WANT_VERSIONS" | tr -d ' ' | tr 'A-Z' 'a-z')
+
+        # 这个窗口名要不要。名字的格式是「平台-窗口起点」，所以从两头切：
+        #   forge-1.20.1  →  平台 forge，窗口 1.20.1
+        want() {
+          name=$1
+          platform=${name%%-*}
+          window=${name##*-}
+          if [ -n "$WANT_VERSIONS" ]; then
+            matched=0
+            for v in ${WANT_VERSIONS//,/ }; do
+              [ "$v" = "$window" ] && matched=1
+            done
+            [ "$matched" = 1 ] || return 1
+          fi
+          if [ -n "$WANT_PLATFORMS" ]; then
+            matched=0
+            for p in ${WANT_PLATFORMS//,/ }; do
+              if [ "$p" = "$platform" ] || [ "$p" = "$name" ]; then matched=1; fi
+            done
+            [ "$matched" = 1 ] || return 1
+          fi
+          return 0
+        }
+
+        # 一行一个平台。参数：窗口名、Gradle 子项目、jar（仓库相对路径）、发布用的 loaders、
+        # 这个窗口声称的游戏版本、这个平台需要的额外 Gradle 参数。
+        #
+        # 那个 properties 字段是必要的：Forge 在 settings.gradle.kts 里是**按需 include** 的
+        # （它的工具链在配置阶段下载），而 Gradle 会配置所有 include 的项目 —— 所以只有 forge 那两格
+        # 才该带 -PwithForge=true，否则每格都要白下一遍 Forge 工具链。
+        #
+        # loaders 只写真跑过的：Bukkit 那份是 Paper 与 Folia（Spigot 明确不支持，插件会自己停用并说明）。
+        #
+        # ⚠️ game-versions 是**每个窗口一份**（`publish_game_versions_26_1` / `_1_20_1`），不能共用 ——
+        # 26.x 的 jar 装不到 1.20.1 上。
+        rows=()
+        add_row() {
+          name=$1 project=$2 jar=$3 loaders=$4 game_versions=$5 properties=$6
+          want "$name" || return 0
+          rows+=("$(printf '{"name":"%s","project":"%s","jar":"%s","loaders":"%s","game-versions":"%s","properties":"%s"}' \
+            "$name" "$project" "$jar" "$loaders" "$game_versions" "$properties")")
+        }
+
+        add_row fabric-26.1    :fabric:fabric-26.1      "fabric/fabric-26.1/build/libs/mc-qq-fabric-26.1-$VERSION.jar"       "fabric"       "$V26_1"   ""
+        add_row neoforge-26.1  :neoforge:neoforge-26.1  "neoforge/neoforge-26.1/build/libs/mc-qq-neoforge-26.1-$VERSION.jar" "neoforge"     "$V26_1"   ""
+        add_row forge-26.1     :forge:forge-26.1        "forge/forge-26.1/build/libs/mc-qq-forge-26.1-$VERSION.jar"           "forge"        "$V26_1"   "-PwithForge=true"
+        add_row spigot-26.1    :spigot:spigot-26.1      "spigot/spigot-26.1/build/libs/mc-qq-spigot-26.1-$VERSION.jar"         "spigot"       "$V26_1"   ""
+        add_row paper-26.1     :paper:paper-26.1        "paper/paper-26.1/build/libs/mc-qq-paper-26.1-$VERSION.jar"           "paper folia"  "$V26_1"   ""
+        add_row forge-1.20.1   :forge:forge-1.20.1      "forge/forge-1.20.1/build/libs/mc-qq-forge-1.20.1-$VERSION.jar"       "forge"        "$V1_20_1" "-PwithForge=true"
+
+        # 筛出空集要当场报错：拼错一个平台名却"构建成功但什么都没出"，比直接失败难查得多。
+        if [ ${#rows[@]} -eq 0 ]; then
+          echo "::error::没有匹配的平台/窗口 —— platforms='${WANT_PLATFORMS:-<全部>}' versions='${WANT_VERSIONS:-<全部>}'。"
+          echo "::error::可用的窗口：fabric-26.1 neoforge-26.1 forge-26.1 forge-1.20.1 paper-26.1 spigot-26.1"
+          exit 1
+        fi
+
+        matrix=$(printf '{"include":[%s]}' "$(IFS=,; echo "${rows[*]}")")
         echo "$matrix"
+        echo "选中 $((${#rows[@]})) 格"
         echo "matrix=$matrix" >> $GITHUB_OUTPUT

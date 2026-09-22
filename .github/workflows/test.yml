@@ -2,16 +2,37 @@ name: Test
 
 # 推 main 与每个 PR 都跑：**每个平台各一格**，并行，哪一格挂了就是哪个平台坏了。
 # 平台清单来自 .github/workflows/platforms.yml —— 加平台只改那一个文件。
+#
+# 也可以手动跑（Actions → Test → Run workflow），用两个输入挑"要构建哪几个"：
+#   platforms: forge             → forge 的全部窗口
+#   platforms: forge-1.20.1      → 只要这一个窗口（平台名或完整窗口名都行）
+#   versions:  26.1              → 只要 26.1 那一档
+#   两个都留空                     → 全部，与 push 时一样
+# 产物照常传成 artifact，所以"我想要一个 forge-1.20.1 的 jar"就是这么拿。
 on:
   push:
     branches:
       - main
   pull_request:
     types: [ opened, synchronize ]
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: 要构建哪些平台，逗号分隔（平台名如 forge，或完整窗口名如 forge-1.20.1）；留空 = 全部
+        required: false
+        default: ""
+      versions:
+        description: 要构建哪些 MC 窗口，逗号分隔（26.1 / 1.20.1）；留空 = 全部
+        required: false
+        default: ""
 
 jobs:
   platforms:
     uses: ./.github/workflows/platforms.yml
+    # push / PR 时 inputs 是空的，等于"全部"；手动跑时才带上筛选。
+    with:
+      platforms: ${{ inputs.platforms }}
+      versions: ${{ inputs.versions }}
 
   build:
     needs: platforms

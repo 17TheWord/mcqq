@@ -14,6 +14,8 @@ name: Platforms
 #     `settings.gradle.kts` 的 include，以及 `release.yml` 里两处产物路径 —— 那两处不在这里）
 #   * 改版本号或 MC 窗口 → **不在这里改**：那些事实的唯一出处是 gradle.properties
 #     （`mod_version`、`publish_game_versions_*`、`minecraft_version_range`），这里只读出来传给调用方。
+#   * 只构建一部分 → 调它时传 `with: { platforms: forge, versions: 1.20.1 }`（两者是"与"的关系；
+#     留空 = 全部）。test.yml 的 workflow_dispatch 就是给这个用的。
 #
 # 为什么 build 不在这里做：本项目一次 `./gradlew build` 就出全部产物，而 loom/moddev 的工具链是共享的，
 # 拆成矩阵会把 MC 工具链各下一遍。矩阵真正需要的地方是**发布**（每个产物一次 mc-publish）与
@@ -26,6 +28,18 @@ name: Platforms
 # 启动前就定下来，而读一个共享值本身得先跑一个 job）。
 on:
   workflow_call:
+    # 两个筛选条件直接转发给 action。调用方不传就是"全部"，所以 release 那边一个字都不用写。
+    inputs:
+      platforms:
+        description: 要构建哪些平台，逗号分隔（平台名如 forge，或完整窗口名如 forge-1.20.1）；留空 = 全部
+        required: false
+        type: string
+        default: ""
+      versions:
+        description: 要构建哪些 MC 窗口，逗号分隔（26.1 / 1.20.1）；留空 = 全部。与 platforms 是"与"的关系
+        required: false
+        type: string
+        default: ""
     outputs:
       version:
         description: gradle.properties 里的 mod_version
@@ -48,3 +62,6 @@ jobs:
       - name: Work out the platform matrix
         id: matrix
         uses: ./.github/actions/platform-matrix
+        with:
+          platforms: ${{ inputs.platforms }}
+          versions: ${{ inputs.versions }}
