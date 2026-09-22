@@ -25,8 +25,10 @@ jobs:
         with:
           java-version: '25'
 
+      # -PwithForge=true：Forge 在 settings.gradle.kts 里是按需 include 的（它的工具链在配置阶段下载，
+      # 网速差的机器上会让整个构建不可用）。CI runner 的网络没问题，所以这里带上它。
       - name: Build every platform and run the tests
-        run: ./gradlew clean build --stacktrace
+        run: ./gradlew clean build -PwithForge=true --stacktrace
 
       - name: Keep the three jars around
         uses: actions/upload-artifact@v4
@@ -35,5 +37,6 @@ jobs:
           path: |
             fabric/build/libs/mc-qq-*.jar
             neoforge/build/libs/mc-qq-*.jar
+            forge/build/libs/mc-qq-*.jar
             bukkit/build/libs/mc-qq-*.jar
           if-no-files-found: error

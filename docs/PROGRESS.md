@@ -3,6 +3,115 @@
 > 2026-09-21 之后的补充都写在这里，最新的在最前面。历史轮次保留原文（它们记录的是当时的判断，
 > 里面的 `mc_qq`、`config/mc-qq/` 等字样是**当时**的事实，不是现在的）。
 
+## Forge 进 CI + 本地按需开关（2026-09-22，最新）
+
+接着上一条：本机下不动 Forge 工具链，但 **CI runner 的网络没问题**，所以让 CI 来跑它，本地保持可用。
+
+* `settings.gradle.kts` 改成**按需 include**：
+  ```kotlin
+  val withForge = startParameter.projectProperties["withForge"].toBoolean()
+  if (withForge) { include("forge") }
+  ```
+  默认（本地）→ 4 个项目（core/fabric/neoforge/bukkit）；`-PwithForge=true` → 多一个 `:forge`。
+  实测：不带参数时 `./gradlew projects` 只列 4 个 ✓；带参数时会去配置 `:forge`（正好卡在那个下载上，说明开关有效）。
+* `test.yml` 与 `release.yml` 的构建步骤都加上 `-PwithForge=true`；artifact、Release 附件、发布矩阵都多一格 forge。
+
+**⚠️ 加这一格时又抓到一个真 bug**：矩阵那段 `printf` 里，`paper` 原来是**最后一项、没有逗号**，
+我在它后面插 `forge` 就少了一个逗号 → 产出**非法 JSON**（`fromJson` 会直接炸）。
+是"把 `run:` 那几行切出来原样执行"验出来的（`...paper folia"}{"name":"forge"...`），光看代码看不出来。
+修好后实测输出 4 格、JSON 合法。
+
+## 加 Forge 模块（2026-09-21）
+
+用户问"你竟然没做 forge"。**确实没做**，补上了 —— 但**构建卡在这台机器的网络上**，所以状态是
+"代码写好并编译验证过、还没进构建"。
+
+### 先纠正一个可能的误解
+
+**Forge 没有因为 NeoForge 分家而死**：`maven.minecraftforge.net` 上现有
+`26.1.2-64.1.3`、`26.2-65.1.3`、`26.3-66.0.2` —— 26.x 一直在跟。
+
+### Forge 26.x 的 API 与 NeoForge 差得不小（都实测过）
+
+| | NeoForge | Forge 26.x |
+| --- | --- | --- |
+| 描述符 | `META-INF/neoforge.mods.toml`，`type="required"` | `META-INF/mods.toml`，`mandatory=true`，另有 `pack.mcmeta` |
+| 依赖声明 | `[[dependencies.<id>]]` | 同，但字段是 `mandatory` |
+| 事件注册 | `NeoForge.EVENT_BUS.addListener(类, 消费者)`（一条总线） | **每个事件自带静态 `BUS`**：`ServerChatEvent.BUS.addListener(消费者)` |
+| `MinecraftForge.EVENT_BUS` | — | 只剩迁移用的壳（`EventBusMigrationHelper`） |
+| 入口 | `@Mod` + `(IEventBus)` | `@Mod` + `(FMLJavaModLoadingContext)` |
+| loaderVersion | `[3,)` | `[64,)`（FML 自己的 build 号） |
+
+**入口类分散在几个 artifact 里**（找它们花了几轮）：`net.minecraftforge.fml.common.Mod` 在
+`javafmllanguage`、`fml.loading.FMLPaths` 在 `fmlloader`；而且**版本号是 `26.1.2-64.1.3` 这种
+（MC 版本 + FML build），不是 `64.1.3`** —— 直接按 `64.1.3` 取是 404。
+
+**命令那部分完全复用 core**：`QqCommands` 只有 4 行，与 NeoForge 那份逐字相同（同为 vanilla 的
+Brigadier + `CommandSourceStack`）—— `BrigadierCommands` 放在 core 的收益第三次兑现。
+
+### 验证到哪一步
+
+* ✅ **代码编译通过**：用 `javac` 直接对着真实 jar 编（`forge-universal` + `fmlloader` + `javafmllanguage`
+  + `fmlcore` + `eventbus` + **vanilla 的 MC client jar** + core + brigadier + slf4j + jspecify + fastutil），
+  5 个文件全部通过 —— 上面那些事件 API 的用法一个错都没有。
+  ⚠️ 注意**不能用 NeoForge 打过补丁的 MC jar** 去编 Forge 代码：里面混着 `net.neoforged.neoforge.*` 接口，
+  会报"找不到 ICommandSourceStackExtension"这类假错误。用 `neoformruntime/artifacts/minecraft_26.1.2_client.jar`。
+* ❌ **Gradle 构建没跑通**：ForgeGradle 的 mavenizer 在**配置阶段**要下载整套 Forge 工具链，而这台机器到
+  Mojang 只有 **~5KB/s**（实测：一个 30MB 的客户端 jar 要近两小时），跑了 22 分钟没有任何文件增长，只能停掉。
+* ❌ 真机加载自然也没跑。
+
+### 踩到的坑：截断的 manifest 会被缓存，之后每次重试都秒失败
+
+ForgeGradle 报 `JsonSyntaxException: Unterminated string at column 73729` —— 它下载的
+`launcher_manifest.json` **被截断了**（缓存里那份正好 73728 字节 = 72KB，缓冲区边界）。
+这台机器到 Mojang 的连接**约 1/10 概率截断**（我连测 10 次：9 次拿到完整的 276542 字节 / 915 个版本，
+1 次只有 196020 字节）。要命的是**坏的那份被缓存下来**，之后每次重试都读缓存、秒失败。
+
+**解法**：删掉
+`%GRADLE_USER_HOME%/caches/minecraftforge/forgegradle/mavenizer/caches/launcher_manifest.json`，再重试。
+
+### 因此：`include("forge")` 暂时注释掉了
+
+Gradle 配置阶段会配置所有 include 的项目 —— 只要 `:forge` 在里面，**本机任何 `./gradlew` 调用都会失败**
+（其他三个平台也编不了）。所以 `settings.gradle.kts` 里那行是注释状态，旁边写清了怎么打开：
+
+1. 网络好的时候（或直接在 CI 上）跑一次 `./gradlew :forge:build`；
+2. 成功后去掉 `settings.gradle.kts` 里 `include("forge")` 的注释。
+
+`forge/` 目录本身是完整的：`build.gradle`（照 MDK，ForgeGradle 7 + shadow）、`META-INF/mods.toml`、
+`pack.mcmeta`、以及 5 个 Java 文件。
+
+## 发布工作流改成矩阵（2026-09-21，最新）
+
+用户指出的：我第一版把三个产物的 mc-publish 写成了**三步串行**，而 QueQiao 是**矩阵**（每格一次上传，并行）。
+改对了 —— 现在 `release.yml` 是：
+
+* `build` job：校验标签/版本号一致 → 算出一个矩阵（三个产物的文件名 + loaders）→ `./gradlew clean build`
+  → 存 Actions artifacts → 建 GitHub Release 并附三个 jar。
+* `publish` job：`strategy.matrix: ${{ fromJson(needs.build.outputs.matrix) }}`，**每个产物一格、并行**，
+  各自 `download-artifact` 后跑一次 mc-publish，各自声明 `loaders` 与 `game-versions`。
+  **没有项目 id 时整段 `if:` 跳过** —— 现阶段就是这样：构建、artifacts、Release 照常，只是不上架。
+
+**构建没拆进矩阵**（和 QueQiao 的差别）：那边每格是独立工程所以每格自己 build；我们一次 `./gradlew build`
+出全三个产物，拆成三格只会把 MC 工具链下载三遍。矩阵只用在"发布"这一步，那本来就是每个产物一次。
+
+### ⚠️ 一个值得记的教训：YAML 块标量会把"顶格的续行"截断
+
+第一版的矩阵生成我用了 `printf` + 反斜杠续行，写进 YAML 时**那几行续行漏了缩进（0 空格）**。
+YAML 的块标量遇到缩进不足的行就**结束**，于是 `run:` 被截成半句、shell 报
+`unexpected EOF while looking for matching ')'`。而**我之前的"校验"没抓到** —— 它只检查"顶层键是不是映射"，
+截断后 YAML 仍然能解析。
+
+**所以：光解析 YAML 不够，得把 `run:` 那几行切出来原样执行一遍。** 这次的验证方式是：
+
+```bash
+START=$(grep -n "matrix=\$(printf" .github/workflows/release.yml | cut -d: -f1)
+sed -n "${START},$((START+7))p" .github/workflows/release.yml | sed 's/^          //' > step.sh
+VERSION=0.1.0 GITHUB_OUTPUT=/tmp/out bash step.sh   # 跑出来就是 fromJson 要的 payload
+```
+
+顺带把 `jq` 也去掉了：它是"又一个要赌 runner 上有没有"的东西，`printf` 到处都有、本地也能照样跑。
+
 ## modid 统一成 `mcqq`（2026-09-21，最新）
 
 用户注意到 NeoForge 那边的 id 是 `mc_qq`，问"能不能直接定义为 `mcqq`"。**可以，而且更好** —— `mcqq`

@@ -1,15 +1,17 @@
 name: Release
 
-# 打一个 v* 标签就发一次：编译三个平台、跑测试、挂到 GitHub Release，并（如果配了项目 id）发到
-# Modrinth 与 CurseForge。
+# 打一个 v* 标签就发一次。
 #
-# 仿照的是 17TheWord/QueQiao 的 .github/workflows/build.yml：那边每个"平台×版本"格子独立构建、
-# 再用 Kir-Antipov/mc-publish 按各自的 loaders 与 game-versions 发出去。本项目三个平台共用一个版本号、
-# 一次构建就出三个产物，所以不需要那边的 matrix.sh 矩阵，但**发布那一步的形态照抄**：一个产物一次 mc-publish，
-# 各自声明 loaders 与 game-versions。
+# 形状照 17TheWord/QueQiao 的 .github/workflows/build.yml：
+#   ① 先算出一个矩阵（那边是 matrix.sh 扫目录出 JSON；这里三个产物是固定的，直接写出来）
+#   ② 矩阵里**每个产物各跑一次 mc-publish**，并行，各自声明自己的 loaders 与 game-versions
 #
-# 与 QueQiao 的一处不同：那边是"推 main 就发"（先删掉同版本 Release 再重建），这里是"打标签才发"。
-# 三个产物同版本、一次构建，打标签比每次合并都发更不容易误发。
+# 与那边唯一的差别：**构建不拆进矩阵**。QueQiao 每个格子是独立工程，所以每格自己 build；
+# 本项目一次 `./gradlew build` 就出全三个产物，拆成三格只会把 MC 工具链下载三遍。
+# 矩阵只用在"发布"这一步 —— 那本来就是每个产物一次。
+#
+# 现阶段没有 Modrinth / CurseForge 的项目 id：**publish 整个 job 会被跳过**，
+# 构建、产物留存（Actions artifacts）与 GitHub Release 照常进行。
 on:
   push:
     tags:
@@ -19,18 +21,21 @@ permissions:
   contents: write
 
 env:
-  # 发布目标。仓库 Settings → Secrets and variables → Actions 里配：
-  #   Variables: MODRINTH_ID / CURSEFORGE_ID —— 先在平台上把项目建好，把它的 id 填进来
+  # 配了才有发布这一步。仓库 Settings → Secrets and variables → Actions：
+  #   Variables: MODRINTH_ID / CURSEFORGE_ID（先在平台上建好项目）
   #   Secrets:   MODRINTH_TOKEN / CURSEFORGE_TOKEN
-  # 没配也能跑：publish 那几步会被跳过，Release 照常创建（这样在项目还没上架前也能用）。
   MODRINTH_ID: ${{ vars.MODRINTH_ID }}
   CURSEFORGE_ID: ${{ vars.CURSEFORGE_ID }}
-  # 实测过的窗口。三个产物共用：26.1 / 26.2 都真机跑过（26.3 还是 pre，不声称）。
+  # 实测过的窗口，三个产物共用（26.3 还是 pre，不声称）。
   GAME_VERSIONS: '[26.1, 26.2]'
 
 jobs:
-  release:
+  build:
     runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
 
     steps:
       - name: Checkout repository
@@ -42,7 +47,7 @@ jobs:
           java-version: '25'
 
       # 版本号只有一个出处（gradle.properties 的 mod_version），标签必须和它一致，
-      # 否则产出的文件名、Modrinth 上的版本号会与标签对不上。
+      # 否则产物的文件名、Modrinth 上的版本号会与标签对不上。
       - name: Check the tag matches the version in gradle.properties
         shell: bash
         run: |
@@ -51,73 +56,95 @@ jobs:
             exit 1
           fi
 
-      # 标签里带连字符就当作预发布（v0.2.0-beta.1）。
-      - name: Decide whether this is a prerelease
+      # 标签里带连字符就当作预发布（v0.2.0-beta.1）。这两个值要给 publish job 用，
+      # 所以写成 job output —— 跨 job 的 env 是不通的。
+      - name: Expose the version and whether this is a prerelease
+        id: version
         shell: bash
         run: |
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
           case "${GITHUB_REF_NAME}" in
-            *-*) echo "PRERELEASE=--prerelease" >> $GITHUB_ENV ;;
-            *)   echo "PRERELEASE=" >> $GITHUB_ENV ;;
+            *-*) echo "prerelease=true"  >> $GITHUB_OUTPUT ;;
+            *)   echo "prerelease=false" >> $GITHUB_OUTPUT ;;
           esac
 
+      # 矩阵就是三个产物：文件名、给哪个 loader。loaders 只写真跑过的 ——
+      # Bukkit 那份是 Paper 与 Folia（Spigot 明确不支持，插件会自己停用并说明）。
+      - name: Generate the publish matrix
+        id: matrix
+        shell: bash
+        run: |
+          # 用 printf 拼，不用 heredoc 也不用 jq：heredoc 的结束标记要求顶格，会被 YAML 块标量的缩进破坏；
+          # jq 是又一个要赌存在的东西，而 printf 在任何 runner 上都有、本地也能照着跑一遍。
+          matrix=$(printf '{"include":['\
+          '{"name":"fabric","file":"mc-qq-%s.jar","loaders":"fabric"},'\
+          '{"name":"neoforge","file":"mc-qq-neoforge-%s.jar","loaders":"neoforge"},'\
+          '{"name":"paper","file":"mc-qq-bukkit-%s.jar","loaders":"paper folia"},'\
+          '{"name":"forge","file":"mc-qq-forge-%s.jar","loaders":"forge"}'\
+          ']}' "$VERSION" "$VERSION" "$VERSION" "$VERSION")
+          echo "$matrix"
+          echo "matrix=$matrix" >> $GITHUB_OUTPUT
+
       - name: Build every platform and run the tests
-        run: ./gradlew clean build --stacktrace
+        run: ./gradlew clean build -PwithForge=true --stacktrace
+
+      - name: Keep the three jars
+        uses: actions/upload-artifact@v4
+        with:
+          name: mc-qq-${{ env.VERSION }}
+          path: |
+            fabric/build/libs/mc-qq-*.jar
+            neoforge/build/libs/mc-qq-*.jar
+            forge/build/libs/mc-qq-*.jar
+            bukkit/build/libs/mc-qq-*.jar
+          if-no-files-found: error
 
       - name: Create the release and attach the three jars
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          gh release create "${GITHUB_REF_NAME}" --generate-notes ${PRERELEASE} \
-            "fabric/build/libs/mc-qq-${VERSION}.jar" \
-            "neoforge/build/libs/mc-qq-neoforge-${VERSION}.jar" \
-            "bukkit/build/libs/mc-qq-bukkit-${VERSION}.jar"
+          if [ "${{ steps.version.outputs.prerelease }}" = "true" ]; then
+            gh release create "${GITHUB_REF_NAME}" --generate-notes --prerelease \
+              "fabric/build/libs/mc-qq-${VERSION}.jar" \
+              "neoforge/build/libs/mc-qq-neoforge-${VERSION}.jar" \
+              "forge/build/libs/mc-qq-forge-${VERSION}.jar" \
+              "bukkit/build/libs/mc-qq-bukkit-${VERSION}.jar"
+          else
+            gh release create "${GITHUB_REF_NAME}" --generate-notes \
+              "fabric/build/libs/mc-qq-${VERSION}.jar" \
+              "neoforge/build/libs/mc-qq-neoforge-${VERSION}.jar" \
+              "forge/build/libs/mc-qq-forge-${VERSION}.jar" \
+              "bukkit/build/libs/mc-qq-bukkit-${VERSION}.jar"
+          fi
 
-      # ---- 下面三步是同一个动作、三份声明：每份产物说清自己是给哪个 loader 的。 ----
-      # loaders 只写真跑过的：Bukkit 那份是 Paper 与 Folia（Spigot 明确不支持，插件会自己停用并说明）。
-      # 版本串加 `+<loader>` 后缀，因为 Modrinth 上同一版本号的三个文件必须能区分开。
+  publish:
+    needs: build
+    # 没有项目 id 就整段跳过：这一步是"上架"，不是"发版"。
+    if: vars.MODRINTH_ID != '' || vars.CURSEFORGE_ID != ''
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.build.outputs.matrix) }}
+    # 这个 job 不 checkout、不装 Gradle：只用上一个 job 传过来的版本号与产物。
+    steps:
+      - name: Fetch the jars built by the previous job
+        uses: actions/download-artifact@v4
+        with:
+          name: mc-qq-${{ needs.build.outputs.version }}
+          path: jars
 
-      - name: Publish the Fabric jar
-        if: env.MODRINTH_ID != '' || env.CURSEFORGE_ID != ''
+      - name: Publish ${{ matrix.name }}
         uses: Kir-Antipov/mc-publish@v3.3
         with:
           modrinth-id: ${{ env.MODRINTH_ID }}
           modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
           curseforge-id: ${{ env.CURSEFORGE_ID }}
           curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
-          name: mc-qq ${{ env.VERSION }} (Fabric)
-          version: ${{ env.VERSION }}+fabric
-          version-type: ${{ env.PRERELEASE == '--prerelease' && 'beta' || 'release' }}
-          loaders: fabric
+          name: mc-qq ${{ needs.build.outputs.version }} (${{ matrix.name }})
+          # 同一版本号的三个产物必须能区分开，所以加 loader 后缀。
+          version: ${{ needs.build.outputs.version }}+${{ matrix.name }}
+          version-type: ${{ needs.build.outputs.prerelease == 'true' && 'beta' || 'release' }}
+          loaders: ${{ matrix.loaders }}
           game-versions: ${{ env.GAME_VERSIONS }}
-          files: fabric/build/libs/mc-qq-${{ env.VERSION }}.jar
-
-      - name: Publish the NeoForge jar
-        if: env.MODRINTH_ID != '' || env.CURSEFORGE_ID != ''
-        uses: Kir-Antipov/mc-publish@v3.3
-        with:
-          modrinth-id: ${{ env.MODRINTH_ID }}
-          modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
-          curseforge-id: ${{ env.CURSEFORGE_ID }}
-          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
-          name: mc-qq ${{ env.VERSION }} (NeoForge)
-          version: ${{ env.VERSION }}+neoforge
-          version-type: ${{ env.PRERELEASE == '--prerelease' && 'beta' || 'release' }}
-          loaders: neoforge
-          game-versions: ${{ env.GAME_VERSIONS }}
-          files: neoforge/build/libs/mc-qq-neoforge-${{ env.VERSION }}.jar
-
-      - name: Publish the Paper / Folia jar
-        if: env.MODRINTH_ID != '' || env.CURSEFORGE_ID != ''
-        uses: Kir-Antipov/mc-publish@v3.3
-        with:
-          modrinth-id: ${{ env.MODRINTH_ID }}
-          modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
-          curseforge-id: ${{ env.CURSEFORGE_ID }}
-          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
-          name: mc-qq ${{ env.VERSION }} (Paper / Folia)
-          version: ${{ env.VERSION }}+paper
-          version-type: ${{ env.PRERELEASE == '--prerelease' && 'beta' || 'release' }}
-          loaders: paper folia
-          game-versions: ${{ env.GAME_VERSIONS }}
-          files: bukkit/build/libs/mc-qq-bukkit-${{ env.VERSION }}.jar
+          files: jars/${{ matrix.file }}

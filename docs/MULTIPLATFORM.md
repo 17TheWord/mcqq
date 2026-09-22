@@ -57,6 +57,7 @@ ModDevGradle 2.0.147 + 26.1.2.109）；③ 等 26.3 稳定后补那一跳。
 | --- | --- | --- | --- | --- |
 | Fabric | `net.fabricmc.fabric-loom`（no-remap，模板用 1.18.1，本仓 1.18.2） | `net.fabricmc:fabric-loader:0.19.5`<br>`net.fabricmc.fabric-api:fabric-api:0.155.3+26.1.2`（26.3 线已到 `0.160.6+26.3`） | `fabric.mod.json` | 无 `modImplementation` / 无 `remapJar`，依赖写 `implementation` |
 | NeoForge | `net.neoforged.moddev` 2.0.147（ModDevGradle） | `26.1.2.109` | `META-INF/neoforge.mods.toml` | 与 Forge 已分家；**modId 不允许连字符**，所以 id 用 `mcqq`（不是项目名 `mc-qq`） |
+| Forge | `net.minecraftforge.gradle` 7.x（ForgeGradle） | `26.1.2-64.1.3` | `META-INF/mods.toml` + `pack.mcmeta` | 26.x 一直在跟（还有 26.2/26.3）；事件 API 与 NeoForge 完全不同（每个事件自带静态 `BUS`）。模块已写好并编译验证，**构建卡在本机到 Mojang 的网速** |
 | Forge | `net.minecraftforge.gradle` `[7.0.17,8)`（ForgeGradle 7） | `net.minecraftforge:forge:26.1.2-64.1.3` | `META-INF/mods.toml` | MDK 里**没有 mappings 行**，Java 25 toolchain |
 | Bukkit 一族（Paper/Spigot/Folia） | 不需要 MC 工具链，`java` + shadow | `io.papermc.paper:paper-api:26.1.2.build.74-stable`<br>`org.spigotmc:spigot-api:26.1.2-R0.1-SNAPSHOT` | `plugin.yml` / `paper-plugin.yml`（可共存） | paper-api 是 **Java 25**（class major 69） |
 

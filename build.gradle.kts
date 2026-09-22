@@ -7,6 +7,9 @@ plugins {
     // NeoForge's toolchain. Its docs only publish Groovy examples, which is why that one project uses
     // build.gradle instead of build.gradle.kts — a copy of upstream beats a translation of it.
     id("net.neoforged.moddev") version "2.0.147" apply false
+    // Forge's toolchain. Forge and NeoForge split at 1.20.2 and their Gradle plugins share nothing, which is
+    // why each needs its own project — the same conclusion the platform research came to.
+    id("net.minecraftforge.gradle") version "[7.0.17,8)" apply false
 }
 
 /**

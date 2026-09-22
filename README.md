@@ -21,8 +21,20 @@ QQ 侧走 [qqbot-java-sdk](https://github.com/skiesworld/qqbot-java-sdk) 0.0.4 �
 core/      不认识 Minecraft 的那一半：常量、配置、模板、QQ 机器人、双向路由、命令树、以及平台实现的接缝。Java 21 字节码。
 fabric/    Fabric 适配：入口点、4 个事件监听、把 core 的命令树注册进 Brigadier、渲染文本进聊天栏。Java 25。
 neoforge/  NeoForge 适配：同一个形状，事件用 NeoForge 的事件总线、命令挂在 RegisterCommandsEvent 上。Java 25。
+forge/     Forge 适配：同形状，但 Forge 26.x 的事件 API 与 NeoForge 完全不同（每个事件自带静态 BUS）。Java 25。
 bukkit/    Paper 适配：JavaPlugin 入口、事件监听、把同一棵树接到 plugin.yml 的命令上。Java 25，不需要 MC 工具链。
 ```
+
+⚠️ **Forge 默认不进本地构建**：它的工具链（ForgeGradle 的 mavenizer）在**配置阶段**就要下载，而 Gradle 会配置
+所有 include 的项目 —— 只要它在列表里，网速差的机器上**任何** `./gradlew` 调用都会失败（连另外三个平台也编不了）。
+所以 `settings.gradle.kts` 里它是按需 include 的：
+
+```bash
+./gradlew build                      # 本地默认：core + fabric + neoforge + bukkit
+./gradlew build -PwithForge=true     # 需要 Forge 时（CI 就是这么调的）
+```
+
+CI runner 的网络没问题，所以两个工作流都带了这个参数。细节见 [docs/PROGRESS.md](docs/PROGRESS.md)。
 
 ⚠️ **mod 的 id 是 `mcqq`，和项目名 `mc-qq` 不是一回事。** 原因是 NeoForge 的 modId 只允许
 `^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$` —— **连字符直接被拒**，FML 起不来。`mcqq` 是 Fabric、NeoForge、Bukkit
@@ -93,6 +105,7 @@ bukkit/    Paper 适配：JavaPlugin 入口、事件监听、把同一棵树接�
 # 产物：
 #   fabric/build/libs/mc-qq-<版本>.jar            → Fabric 服务端 mods/
 #   neoforge/build/libs/mc-qq-neoforge-<版本>.jar → NeoForge 服务端 mods/
+#   forge/build/libs/mc-qq-forge-<版本>.jar       → Forge 服务端 mods/（见下：暂时不在构建里）
 #   bukkit/build/libs/mc-qq-bukkit-<版本>.jar     → Paper 系服务端 plugins/
 # 同目录的 -dev.jar 是不带任何依赖的瘦 jar，不要用它。
 # 另有 core/build/libs/mc-qq-core-<版本>.jar，那是内部产物，不需要单独安装。
@@ -182,11 +195,15 @@ game-versions 发到 Modrinth / CurseForge）：
 | 文件 | 什么时候跑 | 干什么 |
 | --- | --- | --- |
 | `actions/set-java/action.yml` | 被下面两个调用 | 装 JDK 25、配 Gradle 缓存、把 `mod_version` 导出成 `VERSION` |
-| `workflows/test.yml` | 推 main、每个 PR | `./gradlew clean build`（三个平台都编、47 个测试都跑），三个 jar 存成 artifact |
-| `workflows/release.yml` | 打 `v*` 标签 | 校验标签与 `mod_version` 一致 → 构建 → 建 GitHub Release → 三个产物各发一次 mc-publish |
+| `workflows/test.yml` | 推 main、每个 PR | `./gradlew clean build -PwithForge=true`（四个平台都编、47 个测试都跑），四个 jar 存成 artifact |
+| `workflows/release.yml` | 打 `v*` 标签 | 校验标签与 `mod_version` 一致 → 构建（含 Forge）→ 存 artifact + 建 GitHub Release → **矩阵**：四个产物各一格，并行各发一次 mc-publish |
 
-本项目只有三个产物、一次构建就出全，所以**没有抄 QueQiao 的 `matrix.sh` 矩阵**（那是它有十几个格子才需要的）；
-发布那一步的形态照抄：**一个产物一次 mc-publish**，各自声明 `loaders` 与 `game-versions`。
+矩阵用在**发布**上：三个产物各一格（`fabric` / `neoforge` / `paper`），并行，各自声明自己的 `loaders`
+与 `game-versions` —— 和 QueQiao 的矩阵是同一个形状，只是它那边每格还要自己 build（每格是独立工程），
+我们一次 `./gradlew build` 就出全三个，拆成三格只会把 MC 工具链下载三遍，所以构建不拆。
+
+**没配项目 id 时 `publish` 整个 job 跳过**：构建、Actions artifacts、GitHub Release 照常，只是不上架。
+想先手动传 Modrinth/CF 的话，从那次 Actions 运行的 artifacts 里下载三个 jar 即可。
 
 **发一次要做的**：
 
