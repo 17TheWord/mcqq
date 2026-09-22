@@ -510,11 +510,24 @@ Bukkit 也好）都要先付的钱**，不是 forge 专属成本。
 4. ~~CI 加一格~~ **待做**：`release.yml` / `test.yml` 还要加 `-PwithForge=true` 的那一格，
    mc-publish 声明 `game-versions: [1.20.1, 1.20.2]`。
 
-**真机验证**（这一代的验证方式与其它平台不同）：`-PjarOnly` 把**打包产物**放进 `run/mods/` 再起服 ——
-因为 Forge 1.20.1 的 dev run 看不见兄弟项目的 classes 目录（它的模块系统只认 jar，
-`build/moddev/serverLegacyClasspath.txt` 85 条全是 jar），而 `project(':core')` 解析成的是 classes 目录。
+**真机验证**（这一代的验证方式与其它平台不同，而且有两条路，别混成一个）：
+
+* **代码对不对** → `installDevJar` 把 **`build/devlibs/` 那份（未 reobf）** 放进 `run/mods/`，
+  `runServer -PwithForge=true -PjarOnly`（`-PjarOnly` 不把 source set 当 mod，否则同一 modId 被发现两次），
+  再用 RCON 敲 `/qq status` / `help` / `templates` / `reload` / `test` —— 全通。
+* **reobf 对不对** → 看字节码（`getName()` → `m_7755_`）并与
+  `build/moddev/artifacts/namedToIntermediate.tsrg` 对照，或丢进一个真正的正式服。
+
+⚠️ **为什么不能把 `build/libs/` 那份塞进 dev 服**：dev run 的 launchTarget 是 `forgeserveruserdev`，
+那里游戏类是 **named** 映射（`hasPermission`），而 `build/libs/` 已经 reobf 成 SRG 了 ——
+会在第一次调 Minecraft API 时 `NoSuchMethodError: CommandSourceStack.m_6761_(int)`。
+（这个坑我踩过一次，而且第一反应是怀疑 reobf 错了；查映射表才发现映射是对的、放错了产物。）
+
+⚠️ **另一个前提**：dev run **看不见兄弟项目的 classes 目录** —— Forge 1.20.1 的模块系统把类路径建成一串 jar
+（`build/moddev/serverLegacyClasspath.txt` 85 条全是 jar），而 `project(':core')` 解析成的是 classes 目录。
 症状是 mod 加载成功、模组列表里也有，但构造器一碰 core 就 `NoClassDefFoundError`。
-另外：**jar 里不能有没 relocate 的第三方包**，否则它的模块系统报
+这也是为什么这个窗口不靠"source set 当 mod"的常规 dev run，而靠 `-PjarOnly` + `run/mods/`。
+⚠️ **jar 里不能有没 relocate 的第三方包**，否则它的模块系统报
 `ResolutionException: ... export package ... to module minecraft` —— 见 PROGRESS 那两条坑。
 
 **万一第 2 步没过**（legacyforge 在 Gradle 9.7.1 上确实不行）—— 这条备份方案最终没用上，留档：

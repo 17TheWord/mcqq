@@ -41,17 +41,53 @@
 `reobfShadowJar` 把 Minecraft 引用改成了 SRG 名（`getName()` → `m_7755_`、`getEntity()` → `m_7639_`，
 `javap` 实测，不是"任务跑了"就算）。
 
-**真机验证**：`./gradlew :forge:forge-1.20.1:runServer -PwithForge=true -PjarOnly`
-（把**打包产物**丢进 `run/mods/`）在真 Forge 1.20.1（47.4.23）上：
+**真机验证**（分两步，因为这一步有个坑）：
+
+① **跑起来**：`./gradlew :forge:forge-1.20.1:installDevJar` 把 jar 放进 `run/mods/`，
+再 `runServer -PwithForge=true -PjarOnly`（`-PjarOnly` 不把 source set 当 mod，否则同一 modId 被发现两次）。
+在真 Forge 1.20.1（47.4.23）上：
 
 ```
 [mcqq/]: mcqq loaded; the QQ bridge comes up with the server
-Done (4.353s)! For help, type "help"
+Done (7.665s)! For help, type "help"
 [mcqq/]: wrote the default config to ...\run\config\mcqq\config.yml; fill in app-id and the group openids
-[mcqq/]: config: bot main still has the REPLACE_ME app-id from the template, skipped
 ```
 
-配置落在 `run/config/mcqq/config.yml`（Forge 的配置目录）✓，桥随服务器起来 ✓，健康的跑了 5 分钟 ✓。
+② **命令真的能跑**：起服时开 RCON，用 `refs/rcon.py` 敲命令（技能里写着"驱动控制台要用 RCON，
+别靠 stdin 管道"—— 这次照做了，也正因此才发现下面那个 bug）：
+
+```
+$ qq status
+[mc-qq] 平台 forge-1.20.1
+[mc-qq] 配置里没有 bot：编辑 ...\run\config\mcqq\config.yml 后 /qq reload
+[mc-qq] bot main still has the REPLACE_ME app-id from the template, skipped
+
+$ qq help      → 6 个子命令全列出来
+$ qq templates → 9 个模板与 9 个占位符全列出来
+$ qq reload    → 已重载配置（+ 重读了状态）
+$ qq test      → 配置里没有 bot，没有可测的群
+```
+
+`平台 forge-1.20.1` 这行同时证明了移植的 `getCurrentVersion().getName()` 是对的。
+命令路径（`RegisterCommandsEvent` → `BrigadierCommands` → `hasPermission(2)` → `sendSuccess`）全通 ✓。
+
+### ⚠️ 一个我自己的验证方法错误：dev 服该放**未 reobf** 的 jar
+
+第一次我把 `build/libs/` 里那份（reobf 过的）塞进 `run/mods/`，命令一敲就炸：
+
+```
+java.lang.NoSuchMethodError: 'boolean net.minecraft.commands.CommandSourceStack.m_6761_(int)'
+```
+
+查映射表（`build/moddev/artifacts/namedToIntermediate.tsrg:18968` → `hasPermission (I)Z m_6761_`）
+**映射是对的**。真正的原因是 dev run 的 launchTarget 是 `forgeserveruserdev`，
+**那个环境里游戏类是 named 映射**（`hasPermission`），而 `build/libs/` 那份已经 reobf 成 SRG 了。
+**reobf 的那份是给正式服用的**（正式服游戏类是 SRG）。
+
+→ 所以这个窗口的验证要分两条路，**别混成一个**：
+* **代码对不对** → `build/devlibs/` 的 jar（未 reobf）放进 dev 服，RCON 敲命令。
+* **reobf 对不对** → 看字节码（`getName()` → `m_7755_`）并与映射表对照，或丢进一个真正式服。
+`installDevJar` 任务就是为第一条路准备的（它只拷 devlibs 里那份厚的，避开同名的薄 jar）。
 
 ### 适配器移植：比预估的小得多
 

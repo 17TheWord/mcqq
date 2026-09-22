@@ -35,9 +35,14 @@ legacyForge {
     // 解析成的是 classes 目录。症状很迷惑 —— mod 加载成功、模组列表里也有，但构造器一碰 core 的类就
     // `NoClassDefFoundError: com/example/mcqq/core/Log$Sink`。NeoForge 26.x 没有这个毛病。
     //
-    // 所以这个窗口的验证方式是**验打包产物**：`-PjarOnly` 不把 source set 当 mod，改把
-    // `build/libs/mc-qq-forge-1.20.1-<版本>.jar` 放进 `run/mods/` 再起服 —— 那也正是服主拿到的东西
-    // （含 shadow 与 reobf）。两个一起加载会让同一个 modId 被发现两次，所以这里是二选一。
+    // 所以这个窗口的验证方式是**验打包产物**：`-PjarOnly` 不把 source set 当 mod，改把 jar 放进 `run/mods/`
+    // 再起服。两个一起加载会让同一个 modId 被发现两次，所以这里是二选一。
+    //
+    // ⚠️ **放哪一个 jar 是关键**（我在这上面错过一次）：dev run 的 launchTarget 是 `forgeserveruserdev`，
+    // 那个环境里**游戏类是 named 映射**（`hasPermission`），所以必须放 **未 reobf** 的那份
+    // （`build/devlibs/`）。放 `build/libs/` 里 reobf 过的那份，会在第一次调 Minecraft API 时
+    // `NoSuchMethodError: CommandSourceStack.m_6761_(int)` —— 因为那份是给**正式服**用的（正式服的游戏类是 SRG）。
+    // 下面的 `installDevJar` 就是干这件事的。
     if (!project.hasProperty('jarOnly')) {
         mods {
             "${mod_id}" { sourceSet sourceSets.main }
@@ -56,6 +61,27 @@ tasks.named('jar') { archiveClassifier = 'dev' }
 // （只有它带着 SDK），所以要 reobf 的是它 —— 官方 LEGACY.md 给的就是这个接法。
 obfuscation {
     reobfuscate(tasks.named('shadowJar'), sourceSets.main)
+}
+
+/**
+ * 把**未 reobf** 的 shadow jar 放进 `run/mods/`，配合 `-PjarOnly` 在 dev 服上验产物。
+ *
+ * 为什么取 `devlibs` 而不是 `libs`：`runServer` 的 launchTarget 是 `forgeserveruserdev`，那里游戏类是
+ * **named** 映射，而 `build/libs/` 那份已经 reobf 成 SRG 了 —— 放进去会在第一次调 Minecraft API 时
+ * `NoSuchMethodError`。reobf 的正确性得靠另一条路验：对比映射表（`build/moddev/artifacts/namedToIntermediate.tsrg`）
+ * 或看字节码，也可以丢进一个真正的正式服。两条路分开验，别混成一个。
+ *
+ * 用法：`./gradlew :forge:forge-1.20.1:installDevJar`，然后
+ * `./gradlew :forge:forge-1.20.1:runServer -PwithForge=true -PjarOnly`
+ */
+tasks.register('installDevJar', Copy) {
+    dependsOn tasks.named('shadowJar')
+    from(layout.buildDirectory.dir('devlibs')) {
+        include "${archives_base_name}-forge-1.20.1-*.jar"
+        // 薄 jar 也叫 -dev.jar，也躺在 devlibs 里；两个一起进 mods/ 会让同一个 modId 被发现两次。
+        exclude '*-dev.jar'
+    }
+    into layout.projectDirectory.dir('run/mods')
 }
 
 tasks.named('processResources') {
