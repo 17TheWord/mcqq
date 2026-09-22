@@ -65,12 +65,14 @@ public final class BridgeConfig {
         private final boolean receiveFromQq;
         private final Set<McEvent> sendToQq;
         private final Map<String, String> templates;
+        private final CommandAccess commandAccess;
 
         Group(String groupOpenid, String label, boolean receiveFromQq, Set<McEvent> sendToQq,
-                Map<String, String> templates) {
+                Map<String, String> templates, CommandAccess commandAccess) {
             this.groupOpenid = groupOpenid;
             this.label = label;
             this.receiveFromQq = receiveFromQq;
+            this.commandAccess = commandAccess;
             // Linked, so /qq status shows the events in the order the file wrote them.
             this.sendToQq = Collections.unmodifiableSet(new LinkedHashSet<>(sendToQq));
             // Only what this group overrides; anything else falls through to the global template.
@@ -102,6 +104,11 @@ public final class BridgeConfig {
         /** The templates this group overrides; empty means it uses the global ones. */
         public Map<String, String> templates() {
             return templates;
+        }
+
+        /** 这个群里谁能执行命令。 */
+        public CommandAccess commandAccess() {
+            return commandAccess;
         }
 
         @Override
@@ -165,17 +172,34 @@ public final class BridgeConfig {
     /** What the packaged template leaves in the file; a bot or group still carrying it was never filled in. */
     private static final String PLACEHOLDER = "REPLACE_ME";
 
+    /** 命令执行默认**关着**：它是唯一一条"从 QQ 能影响服务器"的路径，必须显式打开。 */
+    private static final String COMMAND_PREFIX_DEFAULT = "/mcc";
+
     private final Map<String, Bot> bots;
     private final Map<String, String> templates;
     private final boolean debug;
+    private final boolean commandsEnabled;
+    private final String commandPrefix;
     private final List<String> problems;
 
     private BridgeConfig(Map<String, Bot> bots, Map<String, String> templates, boolean debug,
-            List<String> problems) {
+            boolean commandsEnabled, String commandPrefix, List<String> problems) {
         this.bots = bots;
         this.templates = Collections.unmodifiableMap(new LinkedHashMap<>(templates));
         this.debug = debug;
+        this.commandsEnabled = commandsEnabled;
+        this.commandPrefix = commandPrefix;
         this.problems = problems;
+    }
+
+    /** 命令执行开着没有。默认关。 */
+    public boolean commandsEnabled() {
+        return commandsEnabled;
+    }
+
+    /** 命令头，三个面（群 / 子频道 / 私聊）都用它。 */
+    public String commandPrefix() {
+        return commandPrefix;
     }
 
     /**
@@ -425,7 +449,7 @@ public final class BridgeConfig {
         try (Reader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
             Object loaded = new Yaml().load(reader);
             if (!(loaded instanceof Map)) {
-                return new BridgeConfig(Map.of(), Map.of(), false,
+                return new BridgeConfig(Map.of(), Map.of(), false, false, COMMAND_PREFIX_DEFAULT,
                         List.of(path + " 是空的，或者不是一个键值对（YAML 对象）"));
             }
             root = (Map<String, Object>) loaded;
@@ -440,6 +464,7 @@ public final class BridgeConfig {
         Object configuredBots = root.get("bots");
         if (!(configuredBots instanceof List)) {
             return new BridgeConfig(Map.of(), templates, truthy(root.get("debug")),
+                    commandsEnabled(root), commandPrefix(root, problems),
                     List.of(path + " needs a top-level 'bots:' list"));
         }
         for (Object entry : (List<Object>) configuredBots) {
@@ -488,7 +513,15 @@ public final class BridgeConfig {
             }
             bots.put(key, new Bot(id, appId, secret, orDefault(secretEnv, "QQ_BOT_SECRET"), groups));
         }
-        return new BridgeConfig(bots, templates, truthy(root.get("debug")), problems);
+        // "开着但谁都执行不了"是最容易发生的误会，所以在这里就说出来。
+        if (commandsEnabled(root) && bots.values().stream()
+                .flatMap(bot -> bot.groups().stream())
+                .allMatch(group -> group.commandAccess().describe() == null)) {
+            problems.add("command.enabled 开着，但没有任何群配了 command（allow / whitelist / roles），"
+                    + "所以谁都执行不了命令");
+        }
+        return new BridgeConfig(bots, templates, truthy(root.get("debug")),
+                commandsEnabled(root), commandPrefix(root, problems), problems);
     }
 
     /**
@@ -560,9 +593,75 @@ public final class BridgeConfig {
             }
             groups.put(openid, new Group(openid, text(groupMap.get("label")),
                     groupMap.get("receive-from-qq") == null || truthy(groupMap.get("receive-from-qq")), send,
-                    templates(groupMap.get("templates"), "群 " + openid, problems)));
+                    templates(groupMap.get("templates"), "群 " + openid, problems),
+                    commandAccess(groupMap.get("command"), "群 " + openid, problems)));
         }
         return groups;
+    }
+
+    /** 命令执行开着没有。整段没写就是关 —— 这是唯一一条"从 QQ 能影响服务器"的路径。 */
+    @SuppressWarnings("unchecked")
+    private static boolean commandsEnabled(Map<String, Object> root) {
+        Object configured = root.get("command");
+        return configured instanceof Map && truthy(((Map<String, Object>) configured).get("enabled"));
+    }
+
+    /** 命令头。空白等于没写；带空格的一律退回默认值（命令头带空格没法用）。 */
+    @SuppressWarnings("unchecked")
+    private static String commandPrefix(Map<String, Object> root, List<String> problems) {
+        Object configured = root.get("command");
+        if (!(configured instanceof Map)) {
+            return COMMAND_PREFIX_DEFAULT;
+        }
+        String prefix = text(((Map<String, Object>) configured).get("prefix"));
+        if (prefix.isEmpty()) {
+            return COMMAND_PREFIX_DEFAULT;
+        }
+        if (prefix.contains(" ")) {
+            problems.add("command.prefix 里有空格（'" + prefix + "'），命令头不能带空格，已按 "
+                    + COMMAND_PREFIX_DEFAULT + " 处理");
+            return COMMAND_PREFIX_DEFAULT;
+        }
+        return prefix;
+    }
+
+    /**
+     * 读一个目标的 {@code command:} 块。
+     *
+     * <p>{@code roles} 只放"额外的"身份组 —— 子频道管理员（5）和自定义身份组。内置的群主（4）与
+     * 管理员（2）归 {@code allow} 管；写进 roles 不生效，所以要说一声，免得有人以为
+     * "roles 里没写 2，所以管理员用不了"。
+     */
+    @SuppressWarnings("unchecked")
+    private static CommandAccess commandAccess(Object configured, String where, List<String> problems) {
+        if (!(configured instanceof Map)) {
+            return CommandAccess.NONE;
+        }
+        Map<String, Object> map = (Map<String, Object>) configured;
+        Set<String> roles = strings(map.get("roles"));
+        for (String builtin : List.of(CommandAccess.ROLE_GUILD_ADMIN, CommandAccess.ROLE_GUILD_OWNER)) {
+            if (roles.contains(builtin)) {
+                problems.add(where + " 的 command.roles 里有 '" + builtin + "' —— 群主/管理员由 allow 管，"
+                        + "写在这里不生效，可以删掉");
+            }
+        }
+        return new CommandAccess(CommandAccess.Allow.parse(map.get("allow"), where, problems),
+                strings(map.get("whitelist")), roles);
+    }
+
+    /** 一串字符串，去掉空白项。 */
+    @SuppressWarnings("unchecked")
+    private static Set<String> strings(Object configured) {
+        Set<String> values = new LinkedHashSet<>();
+        if (configured instanceof List) {
+            for (Object value : (List<Object>) configured) {
+                String one = text(value);
+                if (!one.isEmpty()) {
+                    values.add(one);
+                }
+            }
+        }
+        return values;
     }
 
     private static boolean truthy(Object value) {

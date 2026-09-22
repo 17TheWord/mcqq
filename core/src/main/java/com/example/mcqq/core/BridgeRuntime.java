@@ -234,6 +234,20 @@ public final class BridgeRuntime implements AutoCloseable {
             String self = bot == null || bot.selfId() == null ? "" : " id=" + bot.selfId();
             lines.add("bot " + botConfig.id() + " [" + state + self + "] 群：" + groupSummary(botConfig));
         }
+        // 命令执行是"从 QQ 能影响服务器"的那条线，所以状态里必须能一眼看到它开着没有、谁能用。
+        if (config.commandsEnabled()) {
+            lines.add("命令执行：开着，命令头 " + config.commandPrefix());
+            for (BridgeConfig.Bot botConfig : config.bots()) {
+                for (BridgeConfig.Group group : botConfig.groups()) {
+                    String access = group.commandAccess().describe();
+                    if (access != null) {
+                        lines.add("  " + group.label() + "：" + access);
+                    }
+                }
+            }
+        } else {
+            lines.add("命令执行：关着（config.yml 的 command.enabled）");
+        }
         if (config.templates().isEmpty()) {
             // Not a problem, but it is the one thing an upgraded config cannot tell you about itself.
             lines.add("文案用的是内置默认（配置里没有 templates 段）；/qq templates 看当前生效的文案");

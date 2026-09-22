@@ -2,6 +2,7 @@ package com.example.mcqq.core;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -11,6 +12,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -204,6 +206,130 @@ class BridgeConfigTest {
 
         assertThrows(IOException.class, () -> BridgeConfig.bindGroup(file, "main", "G1"),
                 "已经绑过的群不该被绑第二次");
+    }
+
+    @Test
+    void readsTheCommandPolicy() throws Exception {
+        BridgeConfig config = read("""
+                command:
+                  enabled: true
+                  prefix: "/mcc"
+
+                bots:
+                  - id: main
+                    app-id: "1"
+                    secret: "abc"
+                    groups:
+                      - group-openid: "G1"
+                        label: 主群
+                        command:
+                          allow: admin
+                          whitelist: ["A"]
+                """);
+
+        assertTrue(config.problems().isEmpty(), config.problems().toString());
+        assertTrue(config.commandsEnabled());
+        assertEquals("/mcc", config.commandPrefix());
+
+        CommandAccess access = config.bots().get(0).groups().get(0).commandAccess();
+        assertEquals(CommandAccess.Allow.ADMIN, access.allow());
+        assertTrue(access.permits(new CommandAccess.Sender("A", "member", Set.of())), "白名单");
+        assertTrue(access.permits(new CommandAccess.Sender("B", "admin", Set.of())), "管理员");
+        assertFalse(access.permits(new CommandAccess.Sender("C", "member", Set.of())));
+    }
+
+    @Test
+    void commandsAreOffByDefaultAndThePrefixHasADefault() throws Exception {
+        BridgeConfig config = read("""
+                bots:
+                  - id: main
+                    app-id: "1"
+                    secret: "abc"
+                    groups:
+                      - group-openid: "G1"
+                """);
+
+        assertFalse(config.commandsEnabled(), "命令执行默认必须关着 —— 它是唯一一条能影响服务器的路径");
+        assertEquals("/mcc", config.commandPrefix());
+        assertNull(config.bots().get(0).groups().get(0).commandAccess().describe(),
+                "没配 command 的目标不该在状态里占一行");
+    }
+
+    @Test
+    void theBuiltInOwnerAndAdminRoleIdsInRolesAreReported() throws Exception {
+        // 那两个 ID 归 allow 管；写进 roles 不生效，所以要说一声，免得有人以为"没写 2 所以管理员用不了"。
+        BridgeConfig config = read("""
+                bots:
+                  - id: main
+                    app-id: "1"
+                    secret: "abc"
+                    groups:
+                      - group-openid: "G1"
+                        command:
+                          roles: ["2", "5", "999"]
+                """);
+
+        assertTrue(config.problems().stream().anyMatch(p -> p.contains("command.roles")),
+                config.problems().toString());
+        assertEquals(Set.of("5", "999"),
+                config.bots().get(0).groups().get(0).commandAccess().extraRoleIds(),
+                "内置的 2 要被剔掉，5 和自定义的留下");
+    }
+
+    @Test
+    void anUnknownAllowIsReportedAndTreatedAsNone() throws Exception {
+        BridgeConfig config = read("""
+                bots:
+                  - id: main
+                    app-id: "1"
+                    secret: "abc"
+                    groups:
+                      - group-openid: "G1"
+                        command:
+                          allow: 管理员
+                """);
+
+        assertEquals(CommandAccess.Allow.NONE, config.bots().get(0).groups().get(0).commandAccess().allow());
+        assertTrue(config.problems().stream().anyMatch(p -> p.contains("command.allow")),
+                config.problems().toString());
+    }
+
+    @Test
+    void enabledWithNothingConfiguredIsReported() throws Exception {
+        // "开着但谁都执行不了"是最容易发生的误会 —— 状态和日志里都要说。
+        BridgeConfig config = read("""
+                command:
+                  enabled: true
+
+                bots:
+                  - id: main
+                    app-id: "1"
+                    secret: "abc"
+                    groups:
+                      - group-openid: "G1"
+                """);
+
+        assertTrue(config.problems().stream().anyMatch(p -> p.contains("谁都执行不了")),
+                config.problems().toString());
+    }
+
+    @Test
+    void aPrefixWithSpacesFallsBackToTheDefault() throws Exception {
+        BridgeConfig config = read("""
+                command:
+                  prefix: "/mcc now"
+
+                bots:
+                  - id: main
+                    app-id: "1"
+                    secret: "abc"
+                    groups:
+                      - group-openid: "G1"
+                """);
+
+        assertEquals("/mcc", config.commandPrefix());
+        assertTrue(config.problems().stream().anyMatch(p -> p.contains("command.prefix")),
+                config.problems().toString());
     }
 
     private static BridgeConfig.Bot bot(BridgeConfig config, String id) {
