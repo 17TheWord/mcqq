@@ -2,6 +2,7 @@ package com.example.mcqq.core;
 
 import com.example.mcqq.core.command.CommandTree;
 import java.nio.file.Path;
+import java.util.List;
 
 /**
  * Everything the bridge needs from the server it runs inside, and nothing more.
@@ -39,4 +40,16 @@ public interface MinecraftPlatform {
      * derived, adding a sub-command in the core changes nothing here.
      */
     void registerCommands(CommandTree tree);
+
+    /**
+     * 以控制台身份跑一条命令，把这段时间里回来的回显收集起来。
+     *
+     * <p><b>权限门在 core 里</b>（"谁能执行"在 {@code CommandAccess} 那边已经判过），所以实现方
+     * 直接用控制台身份即可，不需要每个平台再判一次权限。
+     *
+     * <p>默认实现照实说"不支持" —— 各平台的派发 API 不一样，没实现的平台不该装作跑了。
+     */
+    default List<String> runCommand(String command) {
+        return List.of("这个平台还不支持执行命令");
+    }
 }

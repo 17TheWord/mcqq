@@ -5,6 +5,7 @@ import com.example.mcqq.core.Log;
 import com.example.mcqq.core.MinecraftPlatform;
 import com.example.mcqq.core.command.CommandTree;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Locale;
 import org.bukkit.Bukkit;
 import org.bukkit.Server;
@@ -80,6 +81,13 @@ public abstract class BukkitPlatformBase implements MinecraftPlatform {
     @Override
     public void onMainThread(Runnable task) {
         server.getScheduler().runTask(plugin, task);
+    }
+
+    @Override
+    public List<String> runCommand(String command) {
+        CollectingSender collector = new CollectingSender(server);
+        Bukkit.dispatchCommand(collector, command);
+        return collector.lines();
     }
 
     @Override

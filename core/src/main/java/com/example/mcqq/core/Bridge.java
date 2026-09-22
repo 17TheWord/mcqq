@@ -5,6 +5,7 @@ import com.example.mcqq.core.command.RootCommand;
 import com.example.mcqq.core.command.sub.BindCommand;
 import com.example.mcqq.core.command.sub.HelpCommand;
 import com.example.mcqq.core.command.sub.ReloadCommand;
+import com.example.mcqq.core.command.sub.RunCommand;
 import com.example.mcqq.core.command.sub.StatusCommand;
 import com.example.mcqq.core.command.sub.TestCommand;
 import com.example.mcqq.core.command.sub.TemplatesCommand;
@@ -54,6 +55,7 @@ public final class Bridge {
         root.addChild(new StatusCommand(this));
         root.addChild(new ReloadCommand(this));
         root.addChild(new BindCommand(this));
+        root.addChild(new RunCommand(this));
         root.addChild(new TemplatesCommand(this));
         root.addChild(new TestCommand(this));
         root.addChild(new HelpCommand(tree));
@@ -127,6 +129,14 @@ public final class Bridge {
         lines.add(reload());
         lines.addAll(statusLines());
         return lines;
+    }
+
+    /**
+     * 以控制台身份跑一条命令，把回显拿回来 —— 与 QQ 侧那条路走的是同一个平台方法，
+     * 所以运维可以用它确认"回显到底抓不抓得到"。
+     */
+    public List<String> runCommand(String command) {
+        return platform.runCommand(command);
     }
 
     /** What {@code /qq bind} resolves its argument against. */
