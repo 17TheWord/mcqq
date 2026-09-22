@@ -41,7 +41,8 @@ final class McCommands {
             return false;
         }
         String prefix = config.commandPrefix();
-        String text = message.content() == null ? "" : message.content().strip();
+        String text = QqEvents.stripLeadingMentions(
+                message.content() == null ? "" : message.content());
         if (prefix.isEmpty() || !text.startsWith(prefix)) {
             return false;
         }

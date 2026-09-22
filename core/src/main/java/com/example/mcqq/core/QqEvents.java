@@ -47,6 +47,25 @@ final class QqEvents {
         return id == null || id.isBlank() ? event.conversationId() : id;
     }
 
+    /**
+     * 去掉正文开头的 @ 标记。
+     *
+     * <p>QQ 把"@ 机器人"写成**正文的一部分**（{@code <@openid>}），所以 {@code @机器人 /mcc list}
+     * 收到的正文其实是 {@code <@...> /mcc list} —— 不剥掉的话命令前缀永远匹配不上。
+     * 这是真机验证发现的：消息进了聊天栏，命令却完全没执行。
+     */
+    static String stripLeadingMentions(String text) {
+        String trimmed = text.stripLeading();
+        while (trimmed.startsWith("<@")) {
+            int end = trimmed.indexOf('>');
+            if (end < 0) {
+                break;
+            }
+            trimmed = trimmed.substring(end + 1).stripLeading();
+        }
+        return trimmed;
+    }
+
     static CommandAccess.Sender of(QQMessageEvent message) {
         String memberRole = message.author() == null || message.author().memberRole == null
                 ? "" : message.author().memberRole;

@@ -211,6 +211,21 @@ class McCommandsTest {
     }
 
     @Test
+    void anAtMentionBeforeTheCommandIsStripped() throws Exception {
+        // 真机上就是这个把命令吞了：@机器人 /mcc list 的正文带着 <@openid> 前缀，
+        // 前缀判断不成立 → 被当普通消息转发进聊天栏，命令完全没跑。
+        try (FakeRcon rcon = new FakeRcon("hunter2", OUTPUT)) {
+            McCommands commands = commands(config(rcon));
+
+            assertTrue(commands.handle(groupMessage("BOSS", "admin",
+                    "<@D602A5A6CCFA90A8EE4851D2512E43D1> /mcc list")));
+
+            assertEquals(List.of(OUTPUT), replies, "@ 标记要先剥掉，否则命令永远不生效");
+            assertEquals("list", rcon.lastCommand());
+        }
+    }
+
+    @Test
     void thePrefixAloneExplainsItself() throws Exception {
         try (FakeRcon rcon = new FakeRcon("hunter2", OUTPUT)) {
             McCommands commands = commands(config(rcon));
