@@ -3,6 +3,7 @@ package com.example.mcqq.core;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import io.github.skiesworld.qqbot.event.QQEvent;
 import io.github.skiesworld.qqbot.event.QQMessageEvent;
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -19,11 +20,22 @@ import java.util.Set;
  *   <li>私聊：两个都没有 —— 它只认白名单。
  * </ul>
  *
- * <p>这是"事件里的原始字段"到"权限判断的输入"之间唯一的一层，所以它单独在这儿、单独测。
+ * <p>会话标识也在这里取：**群是 {@code group_openid}、子频道是 {@code channel_id}、
+ * 私聊是 {@code user_openid}**。SDK 的 {@code scene()} 里就有"哪个面取哪个键"那张表，所以先问它，
+ * 它认不出来时才退回 {@code conversationId()}。
+ *
+ * <p>读事件字段这件事只有这一处，所以它单独在这儿、单独测。
  */
-final class SenderIdentity {
+final class QqEvents {
 
-    private SenderIdentity() {
+    private QqEvents() {
+    }
+
+    /** 这条消息属于哪个会话：群 openid / 子频道 id / 用户 openid。 */
+    static String conversationId(QQEvent event) {
+        var scene = event.scene();
+        String id = scene == null ? null : scene.targetId(event);
+        return id == null || id.isBlank() ? event.conversationId() : id;
     }
 
     static CommandAccess.Sender of(QQMessageEvent message) {

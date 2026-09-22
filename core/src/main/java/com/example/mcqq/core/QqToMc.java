@@ -34,8 +34,10 @@ public final class QqToMc {
 
     private final MinecraftPlatform platform;
     private final BridgeConfig config;
+    private final BridgeConfig.Bot bot;
     private final String botId;
     private final UnboundGroups unbound;
+    private final McCommands commands;
     private final Map<String, Boolean> seen = new LinkedHashMap<>(64, 0.75f, true) {
         @Override
         protected boolean removeEldestEntry(Map.Entry<String, Boolean> eldest) {
@@ -43,16 +45,23 @@ public final class QqToMc {
         }
     };
 
-    public QqToMc(MinecraftPlatform platform, BridgeConfig config, String botId, UnboundGroups unbound) {
+    public QqToMc(MinecraftPlatform platform, BridgeConfig config, BridgeConfig.Bot bot,
+            UnboundGroups unbound) {
         this.platform = platform;
         this.config = config;
-        this.botId = botId;
+        this.bot = bot;
+        this.botId = bot.id();
         this.unbound = unbound;
+        this.commands = new McCommands(platform, config, bot);
     }
 
     @On({EventType.GROUP_MESSAGE_CREATE, EventType.GROUP_AT_MESSAGE_CREATE,
-            EventType.MESSAGE_CREATE, EventType.AT_MESSAGE_CREATE})
+            EventType.MESSAGE_CREATE, EventType.AT_MESSAGE_CREATE, EventType.C2C_MESSAGE_CREATE})
     public void onGroupMessage(QQMessageEvent message) {
+        // 命令先过一遍：它可能在私聊里，那时根本没有"目标"可查。
+        if (commands.handle(message)) {
+            return;
+        }
         Optional<BridgeConfig.Target> bound = target(message);
         if (bound.isEmpty()) {
             noteUnbound(message.conversationId());
@@ -118,19 +127,8 @@ public final class QqToMc {
     }
 
     private Optional<BridgeConfig.Target> target(QQEvent event) {
-        return config.target(conversationId(event));
-    }
-
-    /**
-     * 事件的会话标识：群是 {@code group_openid}，子频道是 {@code channel_id}。
-     *
-     * <p>SDK 的 {@code scene()} 知道每个面该取哪个键（{@code ReplyTarget} 里就是那张表），
-     * 所以先问它；它认不出来时才退回 {@code conversationId()}。
-     */
-    private static String conversationId(QQEvent event) {
-        var scene = event.scene();
-        String id = scene == null ? null : scene.targetId(event);
-        return id == null || id.isBlank() ? event.conversationId() : id;
+        // 只看**这个 bot** 的目标：同一个群被两个 bot 都加了时，不该串台。
+        return bot.target(QqEvents.conversationId(event));
     }
 
     /**

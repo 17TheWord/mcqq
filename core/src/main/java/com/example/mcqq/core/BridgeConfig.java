@@ -261,9 +261,10 @@ public final class BridgeConfig {
         private final String secretEnvironmentVariable;
         private final Map<String, Group> groups;
         private final Map<String, Channel> channels;
+        private final CommandAccess directAccess;
 
         Bot(String id, String appId, String secret, String secretEnvironmentVariable, Map<String, Group> groups,
-                Map<String, Channel> channels) {
+                Map<String, Channel> channels, CommandAccess directAccess) {
             this.id = id;
             this.appId = appId;
             this.secret = secret;
@@ -272,6 +273,7 @@ public final class BridgeConfig {
             // forward loop.
             this.groups = Collections.unmodifiableMap(new LinkedHashMap<>(groups));
             this.channels = Collections.unmodifiableMap(new LinkedHashMap<>(channels));
+            this.directAccess = directAccess;
         }
 
         public String id() {
@@ -302,6 +304,13 @@ public final class BridgeConfig {
 
         public List<Channel> channels() {
             return List.copyOf(channels.values());
+        }
+
+        /**
+         * 私聊里谁能执行命令。私聊**没有身份概念**，所以这里永远是"只认白名单"。
+         */
+        public CommandAccess directAccess() {
+            return directAccess;
         }
 
         public Optional<Channel> channel(String channelId) {
@@ -681,7 +690,8 @@ public final class BridgeConfig {
                         + "（要改用环境变量就把 secret 删掉）");
             }
             bots.put(key, new Bot(id, appId, secret, orDefault(secretEnv, "QQ_BOT_SECRET"), groups,
-                    channels(botMap.get("channels"), id, problems)));
+                    channels(botMap.get("channels"), id, problems),
+                    directAccess(botMap.get("direct"), id, problems)));
         }
         // "开着但谁都执行不了"是最容易发生的误会，所以在这里就说出来。
         if (commandsEnabled(root) && bots.values().stream()
@@ -853,6 +863,25 @@ public final class BridgeConfig {
             return COMMAND_PREFIX_DEFAULT;
         }
         return prefix;
+    }
+
+    /**
+     * 读 {@code direct:} 块 —— 私聊只用来执行命令，只认白名单。
+     *
+     * <p>私聊没有身份概念（官方文档里 C2C 事件没有角色字段），所以这里没有 {@code allow} 这个键；
+     * 写了也只会被忽略并提示一句。
+     */
+    @SuppressWarnings("unchecked")
+    private static CommandAccess directAccess(Object configured, String botId, List<String> problems) {
+        if (!(configured instanceof Map)) {
+            return CommandAccess.NONE;
+        }
+        Map<String, Object> map = (Map<String, Object>) configured;
+        if (map.containsKey("allow")) {
+            problems.add("bot " + botId + " 的 direct.allow 没有意义 —— 私聊没有身份概念，"
+                    + "只认 whitelist，已忽略");
+        }
+        return new CommandAccess(CommandAccess.Allow.NONE, strings(map.get("whitelist")), Set.of());
     }
 
     /**

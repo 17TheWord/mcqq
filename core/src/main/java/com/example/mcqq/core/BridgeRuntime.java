@@ -168,7 +168,7 @@ public final class BridgeRuntime implements AutoCloseable {
                 .intents(Intent.GROUP_AND_C2C_EVENT, Intent.GROUP_MEMBER_EVENT)
                 .build();
         QQBotClient bot = new QQBotClient(qq, new HttpTransport(qq), new EventBus(dispatcher::execute));
-        bot.handlers().register(new QqToMc(platform, config, botConfig.id(), unbound));
+        bot.handlers().register(new QqToMc(platform, config, botConfig, unbound));
         bots.register(bot);
         registered.add(bot);
         Log.info("已接入 bot " + botConfig.id() + "，绑了 " + botConfig.targets().size() + " 个目标（群 + 子频道）");
@@ -243,6 +243,11 @@ public final class BridgeRuntime implements AutoCloseable {
                     if (access != null) {
                         lines.add("  " + target.label() + "：" + access);
                     }
+                }
+                String direct = botConfig.directAccess().describe();
+                if (direct != null) {
+                    // 私聊是"服主的管理通道"，谁能用必须能一眼看到。
+                    lines.add("  私聊：" + direct);
                 }
             }
         } else {

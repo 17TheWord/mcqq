@@ -78,4 +78,9 @@ bots:
     #       whitelist: ["<用户 openid>"]
     #       roles: ["5", "<自定义身份组 ID>"]   # 只放子频道管理员 5 与自定义身份组
 
+    # 私聊：只用来执行命令，只认白名单。私聊没有身份概念（官方文档里 C2C 事件没有角色字段），
+    # 所以这里没有 allow —— 群里那套"群主 / 管理员"在私聊里无从判断。
+    # direct:
+    #   whitelist: ["<服主的 openid>"]
+
 # send-to-qq 可选：chat、join、quit、death。整个键删掉就取这四项。

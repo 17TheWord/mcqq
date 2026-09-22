@@ -430,6 +430,44 @@ class BridgeConfigTest {
                 config.problems().toString());
     }
 
+    @Test
+    void readsTheDirectWhitelist() throws Exception {
+        BridgeConfig config = read("""
+                bots:
+                  - id: main
+                    app-id: "1"
+                    secret: "abc"
+                    direct:
+                      whitelist: ["OWNER"]
+                    groups:
+                      - group-openid: "G1"
+                """);
+
+        assertTrue(config.problems().isEmpty(), config.problems().toString());
+        CommandAccess access = config.bots().get(0).directAccess();
+        assertEquals(CommandAccess.Allow.NONE, access.allow(), "私聊没有身份概念，allow 固定是 none");
+        assertTrue(access.permits(CommandAccess.Sender.of("OWNER")));
+        assertFalse(access.permits(CommandAccess.Sender.of("陌生人")));
+    }
+
+    @Test
+    void aDirectAllowKeyIsReportedAsMeaningless() throws Exception {
+        // 私聊事件里没有角色字段，所以 allow 在这儿没有对象可判 —— 写了要说一声。
+        BridgeConfig config = read("""
+                bots:
+                  - id: main
+                    app-id: "1"
+                    secret: "abc"
+                    direct:
+                      allow: admin
+                      whitelist: ["OWNER"]
+                """);
+
+        assertTrue(config.problems().stream().anyMatch(p -> p.contains("direct.allow")),
+                config.problems().toString());
+        assertTrue(config.bots().get(0).directAccess().permits(CommandAccess.Sender.of("OWNER")));
+    }
+
     private static BridgeConfig.Bot bot(BridgeConfig config, String id) {
         return config.bots().stream().filter(b -> b.id().equals(id)).findFirst().orElseThrow();
     }

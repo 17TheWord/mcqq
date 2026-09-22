@@ -12,10 +12,10 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 /**
- * 事件字段 → 权限判断的输入。三个面各自的字段不一样，而且**都在事件里** ——
- * 所以这一段能离线钉住：拿一条真的形状的事件，看取出来的身份对不对。
+ * 读事件字段：谁在说话，以及这条消息属于哪个会话。三个面各自的字段不一样，
+ * 而且**都在事件里** —— 所以这一段能离线钉住：拿一条真的形状的事件，看取出来的是什么。
  */
-class SenderIdentityTest {
+class QqEventsTest {
 
     /** 一条群消息：身份在 author.member_role 上。 */
     private static QQMessageEvent groupMessage(String openid, String memberRole) {
@@ -41,15 +41,15 @@ class SenderIdentityTest {
 
     @Test
     void aGroupMessageCarriesTheMemberRole() {
-        assertEquals("owner", SenderIdentity.of(groupMessage("A", "owner")).memberRole());
-        assertEquals("admin", SenderIdentity.of(groupMessage("A", "admin")).memberRole());
-        assertEquals("member", SenderIdentity.of(groupMessage("A", "member")).memberRole());
-        assertEquals("A", SenderIdentity.of(groupMessage("A", "owner")).openid());
+        assertEquals("owner", QqEvents.of(groupMessage("A", "owner")).memberRole());
+        assertEquals("admin", QqEvents.of(groupMessage("A", "admin")).memberRole());
+        assertEquals("member", QqEvents.of(groupMessage("A", "member")).memberRole());
+        assertEquals("A", QqEvents.of(groupMessage("A", "owner")).openid());
     }
 
     @Test
     void aChannelMessageCarriesTheRoleIds() {
-        CommandAccess.Sender sender = SenderIdentity.of(channelMessage("U1", "[\"1\",\"2\"]"));
+        CommandAccess.Sender sender = QqEvents.of(channelMessage("U1", "[\"1\",\"2\"]"));
 
         assertEquals(Set.of("1", "2"), sender.roleIds());
         assertEquals("U1", sender.openid());
@@ -58,23 +58,23 @@ class SenderIdentityTest {
 
     @Test
     void aChannelMessageWithNoRolesIsEmptyNotBroken() {
-        assertEquals(Set.of(), SenderIdentity.of(channelMessage("U1", "[]")).roleIds());
-        assertEquals(Set.of(), SenderIdentity.of(channelMessage("U1", "null")).roleIds());
+        assertEquals(Set.of(), QqEvents.of(channelMessage("U1", "[]")).roleIds());
+        assertEquals(Set.of(), QqEvents.of(channelMessage("U1", "null")).roleIds());
     }
 
     @Test
     void theFieldsFeedThePermissionCheck() {
         // 群主 + allow=owner → 放行；同一条消息在 allow=none 下不放行。
         CommandAccess ownerOnly = new CommandAccess(CommandAccess.Allow.OWNER, Set.of(), Set.of());
-        assertTrue(ownerOnly.permits(SenderIdentity.of(groupMessage("A", "owner"))));
-        assertFalse(ownerOnly.permits(SenderIdentity.of(groupMessage("A", "admin"))));
+        assertTrue(ownerOnly.permits(QqEvents.of(groupMessage("A", "owner"))));
+        assertFalse(ownerOnly.permits(QqEvents.of(groupMessage("A", "admin"))));
 
         // 频道：roles 里有 4（群主）→ allow=owner 放行；只有 1（全体）→ 不放行。
-        assertTrue(ownerOnly.permits(SenderIdentity.of(channelMessage("U1", "[\"4\"]"))));
-        assertFalse(ownerOnly.permits(SenderIdentity.of(channelMessage("U1", "[\"1\"]"))));
+        assertTrue(ownerOnly.permits(QqEvents.of(channelMessage("U1", "[\"4\"]"))));
+        assertFalse(ownerOnly.permits(QqEvents.of(channelMessage("U1", "[\"1\"]"))));
 
         // 额外身份组（子频道管理员 5）独立于 allow：allow=none 也放行。
         CommandAccess extra = new CommandAccess(CommandAccess.Allow.NONE, Set.of(), Set.of("5"));
-        assertTrue(extra.permits(SenderIdentity.of(channelMessage("U1", "[\"1\",\"5\"]"))));
+        assertTrue(extra.permits(QqEvents.of(channelMessage("U1", "[\"1\",\"5\"]"))));
     }
 }
