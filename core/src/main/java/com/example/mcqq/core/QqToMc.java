@@ -82,9 +82,9 @@ public final class QqToMc {
                     + " bot=" + mentioned.bot + " username=" + mentioned.username);
         }
         Log.debug("  mentionedBot()=" + message.mentionedBot());
-        // 被动回复要的是 d.id，而 SDK 的 event.id() 是信封的 id —— 两个到底一不一样，只有真机知道。
+        // 被动回复要的是消息自己的 id（messageId()），信封的 id（eventId()）是另一回事 —— 真机上验过两者不同。
         com.google.gson.JsonElement inner = message.rawObject().get("id");
-        Log.debug("  信封 id（SDK 的 event.id()）=" + message.id()
+        Log.debug("  事件 id（eventId()）=" + message.eventId()
                 + "  d.id=" + (inner == null ? "(没有)" : inner.getAsString()));
         if (!target.receivesFromQq()) {
             Log.debug("群 " + target.label() + " 配成了只出不进，忽略这条消息");
@@ -96,8 +96,8 @@ public final class QqToMc {
             Log.debug("群 " + target.label() + " 的消息没有文字内容，忽略");
             return;
         }
-        if (!firstSeen("m:" + message.id())) {
-            Log.debug("群 " + target.label() + " 的消息 " + message.id() + " 是平台重推的，忽略");
+        if (!firstSeen("m:" + message.eventId())) {
+            Log.debug("群 " + target.label() + " 的消息 " + message.eventId() + " 是平台重推的，忽略");
             return;
         }
         String who = message.author() == null || message.author().username == null
@@ -128,8 +128,8 @@ public final class QqToMc {
             Log.debug("群 " + target.label() + " 配成了只出不进，忽略成员变动");
             return;
         }
-        if (!firstSeen("n:" + notice.name() + ':' + notice.id())) {
-            Log.debug("群 " + target.label() + " 的成员变动 " + notice.id() + " 是平台重推的，忽略");
+        if (!firstSeen("n:" + notice.name() + ':' + notice.eventId())) {
+            Log.debug("群 " + target.label() + " 的成员变动 " + notice.eventId() + " 是平台重推的，忽略");
             return;
         }
         Optional<String> member = notice.subject();
