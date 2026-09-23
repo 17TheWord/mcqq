@@ -37,6 +37,11 @@ public final class Bridge {
      * about to run {@code /qq bind}.
      */
     private final UnboundGroups unboundGroups = new UnboundGroups();
+    /**
+     * RCON 命令的专用线程，跟着 Bridge 走而不是跟着 runtime：{@code /qq reload} 换掉 runtime 是常事，
+     * 已排队的命令不该因为有人敲了一次 reload 就凭空消失。
+     */
+    private final ConsoleRunner console = new ConsoleRunner();
     private volatile BridgeRuntime runtime;
     private volatile boolean started;
 
@@ -136,14 +141,19 @@ public final class Bridge {
     }
 
     /**
-     * 用服务端自己的 RCON 跑一条命令，把回显拿回来 —— 与 QQ 侧那条路走的是同一个方法，
-     * 所以运维可以用它确认"回显到底抓不抓得到"。
+     * 把一条命令交给 {@link ConsoleRunner} 的线程去跑，回显用回调送回来（回调跑在那条线程上）。
+     *
+     * <p>调用方**等不得**：游戏内的 {@code /qq run} 跑在服务端主线程上，而 RCON 收下的命令恰恰要等
+     * 主线程去执行 —— 同步等就是自己等自己，必挂满超时。队列满了则当场回调一句"忙"，不会无声吞掉。
      *
      * <p>走 RCON 而不是在进程里派发：原版命令只认真正的 Craft 发送者，而它的输出直接进日志，
-     * 外面套一层收不到（见 {@link Rcon}）。RCON 是协议，所以这里一处实现，各平台通用。
+     * 外面套一层收不到（见 {@link Rcon}）。
      */
-    public List<String> runCommand(String command) {
-        return ServerConsole.run(platform, command);
+    public void submitCommand(String command, java.util.function.Consumer<List<String>> echo) {
+        if (!console.submit(() -> echo.accept(ServerConsole.run(platform, command)))) {
+            echo.accept(List.of("命令队列已满（前面还排着 " + ConsoleRunner.QUEUE_LIMIT
+                    + " 条），等一等再试"));
+        }
     }
 
     /** What {@code /qq bind} resolves its argument against. */
@@ -186,7 +196,7 @@ public final class Bridge {
     private BridgeRuntime replacement() {
         try {
             return BridgeRuntime.start(BridgeConfig.load(
-                    BridgeConfig.configPath(platform.configDir())), platform, unboundGroups);
+                    BridgeConfig.configPath(platform.configDir())), platform, unboundGroups, console);
         } catch (Exception e) {
             Log.error("QQ 桥接读取配置失败；服务器照常运行", e);
             return null;

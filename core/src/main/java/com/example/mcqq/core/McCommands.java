@@ -28,14 +28,16 @@ final class McCommands {
     private final MinecraftPlatform platform;
     private final BridgeConfig config;
     private final BridgeConfig.Bot bot;
+    private final ConsoleRunner console;
 
-    McCommands(MinecraftPlatform platform, BridgeConfig config, BridgeConfig.Bot bot) {
+    McCommands(MinecraftPlatform platform, BridgeConfig config, BridgeConfig.Bot bot, ConsoleRunner console) {
         this.platform = platform;
         this.config = config;
         this.bot = bot;
+        this.console = console;
     }
 
-    /** 这条消息是命令吗？是就处理掉并返回 true（执行成功、被拒、被静默都算处理了）。 */
+    /** 这条消息是命令吗？是就处理掉并返回 true（执行成功、被拒都算处理了）。 */
     boolean handle(QQMessageEvent message) {
         if (!config.commandsEnabled()) {
             return false;
@@ -52,8 +54,13 @@ final class McCommands {
             return true;
         }
 
-        // 会话属于谁：群 / 子频道看配置里的目标，私聊没有目标。
+        // 会话归属看**事件的 scene**，不看"配置里找不找得到"：没绑定的群/子频道不是私聊 ——
+        // 否则私聊白名单会在机器人加入的任何群里生效。未绑定会话原样交回 QqToMc，
+        // 走它的"没绑定"记档与 /qq bind 指路。
         Optional<BridgeConfig.Target> target = bot.target(QqEvents.conversationId(message));
+        if (target.isEmpty() && !QqEvents.isPrivateChat(message)) {
+            return false;
+        }
         CommandAccess access = target.map(BridgeConfig.Target::commandAccess).orElseGet(bot::directAccess);
         boolean privateChat = target.isEmpty();
 
@@ -68,7 +75,10 @@ final class McCommands {
         }
 
         Log.info("执行命令（" + (target.map(BridgeConfig.Target::label).orElse("私聊")) + "）：" + command);
-        reply(message, render(ServerConsole.run(platform, command)));
+        // 交给 RCON 那条线程：这里是 SDK 的事件线程，同步等一次超时，别的会话就得跟着排队。
+        if (!console.submit(() -> reply(message, render(ServerConsole.run(platform, command))))) {
+            reply(message, "命令队列已满（前面还排着 " + ConsoleRunner.QUEUE_LIMIT + " 条），等一等再试");
+        }
         return true;
     }
 

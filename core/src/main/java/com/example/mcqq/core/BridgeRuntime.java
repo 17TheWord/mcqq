@@ -29,6 +29,8 @@ public final class BridgeRuntime implements AutoCloseable {
     private final MinecraftPlatform platform;
     private final BridgeConfig config;
     private final UnboundGroups unbound;
+    /** 命令的 RCON 线程。不归本对象所有、也不随本对象关闭 —— 它跟着 {@link Bridge} 走。 */
+    private final ConsoleRunner console;
     private final ExecutorService dispatcher;
     private final Bots bots = new Bots();
     /** Written from the startup thread and the bot connector, read by {@code /qq status} on a player's thread. */
@@ -37,10 +39,12 @@ public final class BridgeRuntime implements AutoCloseable {
 
     private volatile boolean connecting = true;
 
-    private BridgeRuntime(MinecraftPlatform platform, BridgeConfig config, UnboundGroups unbound) {
+    private BridgeRuntime(MinecraftPlatform platform, BridgeConfig config, UnboundGroups unbound,
+            ConsoleRunner console) {
         this.platform = platform;
         this.config = config;
         this.unbound = unbound;
+        this.console = console;
         // One task per dispatch, off the game's thread; the bus keeps each conversation's order itself.
         //
         // A cached pool rather than virtual threads, even though virtual threads fit this shape better:
@@ -57,9 +61,10 @@ public final class BridgeRuntime implements AutoCloseable {
     }
 
     /** Starts the bots for an already-parsed config. Nothing here throws into server startup. */
-    public static BridgeRuntime start(BridgeConfig config, MinecraftPlatform platform, UnboundGroups unbound) {
+    public static BridgeRuntime start(BridgeConfig config, MinecraftPlatform platform, UnboundGroups unbound,
+            ConsoleRunner console) {
         Log.debugEnabled(config.debug());
-        BridgeRuntime runtime = new BridgeRuntime(platform, config, unbound);
+        BridgeRuntime runtime = new BridgeRuntime(platform, config, unbound, console);
         runtime.start();
         return runtime;
     }
@@ -168,7 +173,7 @@ public final class BridgeRuntime implements AutoCloseable {
                 .intents(Intent.GROUP_AND_C2C_EVENT, Intent.GROUP_MEMBER_EVENT)
                 .build();
         QQBotClient bot = new QQBotClient(qq, new HttpTransport(qq), new EventBus(dispatcher::execute));
-        bot.handlers().register(new QqToMc(platform, config, botConfig, unbound));
+        bot.handlers().register(new QqToMc(platform, config, botConfig, unbound, console));
         bots.register(bot);
         registered.add(bot);
         Log.info("已接入 bot " + botConfig.id() + "，绑了 " + botConfig.targets().size() + " 个目标（群 + 子频道）");

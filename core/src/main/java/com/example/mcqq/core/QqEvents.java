@@ -47,6 +47,11 @@ final class QqEvents {
         return id == null || id.isBlank() ? event.conversationId() : id;
     }
 
+    /** 这条消息是不是**真正的私聊**（C2C）。群和子频道即使没绑定也不是私聊 —— 见 {@code McCommands}。 */
+    static boolean isPrivateChat(io.github.skiesworld.qqbot.event.QQEvent event) {
+        return event.scene() == io.github.skiesworld.qqbot.message.ReplyTarget.C2C;
+    }
+
     static CommandAccess.Sender of(QQMessageEvent message) {
         String memberRole = message.author() == null || message.author().memberRole == null
                 ? "" : message.author().memberRole;
