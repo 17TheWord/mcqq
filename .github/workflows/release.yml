@@ -10,9 +10,11 @@ name: Release
 # 所以"一个工作流打 tag、另一个挂 tag 触发"那种写法，后者永远不会跑。
 # 鹊桥（17TheWord/QueQiao）也是因此让 build 与 release 都挂 push: main。
 #
-# ⚠️ 版本号没变就不发（tag 已存在 → 整个工作流跳过）。
+# ⚠️ 版本号没变就不发：**检测到 v<版本> 标签已存在就停**，不删了重建。
 # 这样"发版"是一个**明确的动作**（在 dev 上改 mod_version，再合 PR），
-# 而不是"每次合并的副作用"。要重发同一个版本，用 workflow_dispatch 的 force。
+# 而不是"每次合并的副作用"；也不会出现"同一个版本被反复发布"。
+# （先删再建是鹊桥的做法，对"每次合并都重发"是够用的，但版本号才是发布的依据，
+#  让它来当闸门更直白。要重发就先把那个标签删掉，再手动跑一次。）
 #
 # 平台清单与 MC 窗口来自 .github/workflows/platforms.yml（**唯一一份**），所以加平台只改那一个文件。
 #
@@ -30,16 +32,8 @@ on:
   push:
     branches:
       - main
+  # 手动跑一次：用来重试（比如上一次发布中途失败了）。标签还在就照样跳过。
   workflow_dispatch:
-    inputs:
-      force:
-        description: 版本号没变也发一次（tag 已存在时重建 release）
-        required: false
-        default: 'false'
-        type: choice
-        options:
-          - 'false'
-          - 'true'
 
 permissions:
   contents: write
@@ -55,7 +49,9 @@ jobs:
   platforms:
     uses: ./.github/workflows/platforms.yml
 
-  # 该不该发。版本号没变（tag 已存在）就整段跳过 —— 一个只改了文档的合并不该再发一次。
+  # 该不该发。**版本号变了才发** —— v<版本> 标签已存在就整段跳过。
+  # 查标签而不是查 release：标签才是"这个版本发过没有"的唯一依据，
+  # 也顺带挡住"只打了标签没建 release"那种半成品状态。
   gate:
     needs: platforms
     runs-on: ubuntu-26.04
@@ -67,19 +63,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.platforms.outputs.version }}
-          FORCE: ${{ inputs.force }}
         run: |
-          if [ "$FORCE" = "true" ]; then
-            echo "release=true" >> $GITHUB_OUTPUT
-            echo "手动指定了 force，照发。"
-            exit 0
-          fi
-          if gh release view "v$VERSION" -R "${{ github.repository }}" >/dev/null 2>&1; then
+          if gh api "repos/${{ github.repository }}/git/ref/tags/v$VERSION" >/dev/null 2>&1; then
             echo "release=false" >> $GITHUB_OUTPUT
-            echo "v$VERSION 已经发过了，跳过（要重发用 workflow_dispatch 的 force=true）。"
+            echo "::notice::v$VERSION 的标签已经存在，版本号没变，跳过发布。要重发就先删掉那个标签。"
           else
             echo "release=true" >> $GITHUB_OUTPUT
-            echo "v$VERSION 还没发过，继续。"
+            echo "v$VERSION 还没有标签，继续发布。"
           fi
 
   build:
@@ -140,14 +130,6 @@ jobs:
             "paper/paper-1.20.1/build/libs/mc-qq-paper-1.20.1-${{ needs.platforms.outputs.version }}.jar")
           # 标签由 gh 顺手打在当前 HEAD（也就是刚合进 main 的那个提交）上。
           TAG="v${{ needs.platforms.outputs.version }}"
-          # force 是"重发同一个版本"：先把旧的 release 与标签清掉，否则 create 会因为标签已存在而失败。
-          # （只删了 release、标签还在的情况也一并清掉；`set +e` 是因为"本来就没有"不算错。）
-          if [ "${{ inputs.force }}" = "true" ]; then
-            set +e
-            gh release delete "$TAG" -R "${{ github.repository }}" -y --cleanup-tag
-            git push --delete origin "$TAG" 2>/dev/null
-            set -e
-          fi
           if [ "${{ steps.tag.outputs.prerelease }}" = "true" ]; then
             gh release create "$TAG" --generate-notes --prerelease $JARS
           else
