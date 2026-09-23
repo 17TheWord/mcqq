@@ -1,6 +1,20 @@
 name: Release
 
-# 打一个 v* 标签就发一次。
+# **合并进 main 就发一次**（版本号变了的话）。
+#
+# 版本号只有一个出处：`gradle.properties` 的 `mod_version`。合进 main 时读它，
+# 标签由 `gh release create` 顺手打在当前 HEAD 上。
+#
+# ⚠️ 触发条件必须是 **push: main**，不能是 tag。
+# 用内置 `GITHUB_TOKEN` 推的 tag **不会触发其他工作流**（GitHub 防递归的规则），
+# 所以"一个工作流打 tag、另一个挂 tag 触发"那种写法，后者永远不会跑。
+# 鹊桥（17TheWord/QueQiao）也是因此让 build 与 release 都挂 push: main。
+#
+# ⚠️ 版本号没变就不发（tag 已存在 → 整个工作流跳过）。
+# 这样"发版"是一个**明确的动作**（在 dev 上改 mod_version，再合 PR），
+# 而不是"每次合并的副作用"。要重发同一个版本，用 workflow_dispatch 的 force。
+#
+# 平台清单与 MC 窗口来自 .github/workflows/platforms.yml（**唯一一份**），所以加平台只改那一个文件。
 #
 # 平台清单与 MC 窗口来自 .github/workflows/platforms.yml（**唯一一份**），所以加平台只改那一个文件。
 #
@@ -14,8 +28,18 @@ name: Release
 # 构建、产物留存（Actions artifacts）与 GitHub Release 照常进行。
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 版本号没变也发一次（tag 已存在时重建 release）
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
 
 permissions:
   contents: write
@@ -31,8 +55,36 @@ jobs:
   platforms:
     uses: ./.github/workflows/platforms.yml
 
-  build:
+  # 该不该发。版本号没变（tag 已存在）就整段跳过 —— 一个只改了文档的合并不该再发一次。
+  gate:
     needs: platforms
+    runs-on: ubuntu-26.04
+    outputs:
+      release: ${{ steps.check.outputs.release }}
+    steps:
+      - name: Is there anything to release?
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.platforms.outputs.version }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          if [ "$FORCE" = "true" ]; then
+            echo "release=true" >> $GITHUB_OUTPUT
+            echo "手动指定了 force，照发。"
+            exit 0
+          fi
+          if gh release view "v$VERSION" -R "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "release=false" >> $GITHUB_OUTPUT
+            echo "v$VERSION 已经发过了，跳过（要重发用 workflow_dispatch 的 force=true）。"
+          else
+            echo "release=true" >> $GITHUB_OUTPUT
+            echo "v$VERSION 还没发过，继续。"
+          fi
+
+  build:
+    needs: [ platforms, gate ]
+    if: needs.gate.outputs.release == 'true'
     runs-on: ubuntu-26.04
     outputs:
       prerelease: ${{ steps.tag.outputs.prerelease }}
@@ -46,23 +98,14 @@ jobs:
         with:
           java-version: '25'
 
-      # 版本号只有一个出处（gradle.properties 的 mod_version，由 platforms.yml 读出来），
-      # 标签必须和它一致，否则产物的文件名、Modrinth 上的版本号会与标签对不上。
-      - name: Check the tag matches the version in gradle.properties
-        shell: bash
-        run: |
-          if [ "v${{ needs.platforms.outputs.version }}" != "${GITHUB_REF_NAME}" ]; then
-            echo "::error::标签 ${GITHUB_REF_NAME} 与 gradle.properties 里的 v${{ needs.platforms.outputs.version }} 不一致；先改 mod_version 再打标签。"
-            exit 1
-          fi
-
-      # 标签里带连字符就当作预发布（v0.2.0-beta.1）。这个值要给 publish job 用，所以写成 job output
+      # 版本号只有一个出处（gradle.properties 的 mod_version，由 platforms.yml 读出来）。
+      # 带连字符就当作预发布（0.2.0-beta.1）。这个值要给 publish job 用，所以写成 job output
       # —— 跨 job 的 env 是不通的。
       - name: Decide whether this is a prerelease
         id: tag
         shell: bash
         run: |
-          case "${GITHUB_REF_NAME}" in
+          case "${{ needs.platforms.outputs.version }}" in
             *-*) echo "prerelease=true"  >> $GITHUB_OUTPUT ;;
             *)   echo "prerelease=false" >> $GITHUB_OUTPUT ;;
           esac
@@ -95,16 +138,26 @@ jobs:
             "forge/forge-1.20.1/build/libs/mc-qq-forge-1.20.1-${{ needs.platforms.outputs.version }}.jar" \
             "spigot/spigot-1.20.1/build/libs/mc-qq-spigot-1.20.1-${{ needs.platforms.outputs.version }}.jar" \
             "paper/paper-1.20.1/build/libs/mc-qq-paper-1.20.1-${{ needs.platforms.outputs.version }}.jar")
+          # 标签由 gh 顺手打在当前 HEAD（也就是刚合进 main 的那个提交）上。
+          TAG="v${{ needs.platforms.outputs.version }}"
+          # force 是"重发同一个版本"：先把旧的 release 与标签清掉，否则 create 会因为标签已存在而失败。
+          # （只删了 release、标签还在的情况也一并清掉；`set +e` 是因为"本来就没有"不算错。）
+          if [ "${{ inputs.force }}" = "true" ]; then
+            set +e
+            gh release delete "$TAG" -R "${{ github.repository }}" -y --cleanup-tag
+            git push --delete origin "$TAG" 2>/dev/null
+            set -e
+          fi
           if [ "${{ steps.tag.outputs.prerelease }}" = "true" ]; then
-            gh release create "${GITHUB_REF_NAME}" --generate-notes --prerelease $JARS
+            gh release create "$TAG" --generate-notes --prerelease $JARS
           else
-            gh release create "${GITHUB_REF_NAME}" --generate-notes $JARS
+            gh release create "$TAG" --generate-notes $JARS
           fi
 
   publish:
-    needs: [ platforms, build ]
+    needs: [ platforms, gate, build ]
     # 没有项目 id 就整段跳过：这一步是"上架"，不是"发版"。
-    if: vars.MODRINTH_ID != '' || vars.CURSEFORGE_ID != ''
+    if: needs.gate.outputs.release == 'true' && (vars.MODRINTH_ID != '' || vars.CURSEFORGE_ID != '')
     runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
