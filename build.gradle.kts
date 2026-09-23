@@ -97,8 +97,12 @@ subprojects {
             exclude("org/slf4j/**")
             exclude("META-INF/services/javax.annotation.processing.Processor")
             duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+            // Apache-2.0 §4.1：分发时**必须把许可证副本给到接收方**。
+            // 打进去的库（SDK / OkHttp / Gson / Kotlin / SnakeYAML …）都是 Apache-2.0，
+            // 所以这份全文必须跟着 jar 走，光列个组件清单不够。
             from(rootProject.file("LICENSE")) { into("") }
             from(rootProject.file("THIRD-PARTY.md")) { into("") }
+            from(rootProject.file("LICENSES/Apache-2.0.txt")) { into("") }
         }
     }
 }
