@@ -10,8 +10,9 @@ name: Release
 # 所以"一个工作流打 tag、另一个挂 tag 触发"那种写法，后者永远不会跑。
 # 鹊桥（17TheWord/QueQiao）也是因此让 build 与 release 都挂 push: main。
 #
-# **手动入口可以选分支**：feature 分支上想发测试版，就在那儿把 mod_version 改成
-# 0.0.1-beta.1（**必须带后缀**），然后在 Actions 里选那个分支手动跑。
+# **手动入口可以选分支**：在 Actions → Release → Run workflow 里选任何分支即可。
+# 非 main 分支上，实际发布版本会**自动加上 -beta.<短 sha>**（见 gate），
+# 所以 gradle.properties 里永远只写正式号（0.0.1 / 0.0.2），不用手写 -beta.N。
 # 带后缀 = 预发布（`--prerelease`，Modrinth 上 version-type 也是 beta）；
 # 非 main 分支**不上架商店**，只留 GitHub Release。
 #
@@ -62,36 +63,39 @@ jobs:
     runs-on: ubuntu-26.04
     outputs:
       release: ${{ steps.check.outputs.release }}
+      version: ${{ steps.check.outputs.version }}
     steps:
       - name: Is there anything to release?
         id: check
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ needs.platforms.outputs.version }}
+          VERSION: ${{ needs.gate.outputs.version }}
         run: |
-          # 非 main 分支上只能发**预发布**版本。
-          # 手动入口（workflow_dispatch）可以选任何分支，这是有意的：feature 分支上想发个
-          # 测试版就在那儿把 mod_version 改成 0.0.1-beta.1 再手动跑。
-          # ⚠️ 但版本号**必须带后缀** —— 否则 v0.0.1 这个正式标签会打在 feature 分支上，
-          # 之后真正的 0.0.1 就永远发不出去了（闸门会一直跳过）。
+          # 实际发布版本：**非 main 分支自动加 -beta.<短 sha> 后缀**。
+          # 所以 gradle.properties 里永远只写正式号（0.0.1 / 0.0.2），不用手写 -beta.N。
+          # 用短 sha 而不是 -beta.N：同一个提交得到的版本是固定的，重跑不会变；
+          # 不同提交也不会撞（`-beta` 固定后缀的话，同一个分支第二次就发不出去了 —— 标签已存在）。
+          EFFECTIVE="$VERSION"
           if [ "${{ github.ref_name }}" != "main" ]; then
             case "$VERSION" in
               *-*)
-                echo "分支 ${{ github.ref_name }} 上发预发布版本 $VERSION ✓"
+                echo "版本号已经带后缀了（$VERSION），不再追加。"
                 ;;
               *)
-                echo "::error::分支 ${{ github.ref_name }} 上只能发预发布版本 —— 版本号要带后缀（0.0.1-beta.1 / 0.0.1-rc.1）。现在是 $VERSION，如果就这么发，v$VERSION 这个标签会落在分支上，正式发布就再也发不出去了。"
-                exit 1
+                SHORT=$(echo "${{ github.sha }}" | cut -c1-7)
+                EFFECTIVE="$VERSION-beta.$SHORT"
+                echo "非 main 分支（${{ github.ref_name }}）→ 实际发布版本 $EFFECTIVE"
                 ;;
             esac
           fi
+          echo "version=$EFFECTIVE" >> $GITHUB_OUTPUT
 
-          if gh api "repos/${{ github.repository }}/git/ref/tags/v$VERSION" >/dev/null 2>&1; then
+          if gh api "repos/${{ github.repository }}/git/ref/tags/v$EFFECTIVE" >/dev/null 2>&1; then
             echo "release=false" >> $GITHUB_OUTPUT
-            echo "::notice::v$VERSION 的标签已经存在，版本号没变，跳过发布。要重发就先删掉那个标签。"
+            echo "::notice::v$EFFECTIVE 的标签已经存在，跳过发布。要重发就先删掉那个标签。"
           else
             echo "release=true" >> $GITHUB_OUTPUT
-            echo "v$VERSION 还没有标签，继续发布。"
+            echo "v$EFFECTIVE 还没有标签，继续发布。"
           fi
 
   build:
@@ -117,18 +121,20 @@ jobs:
         id: tag
         shell: bash
         run: |
-          case "${{ needs.platforms.outputs.version }}" in
+          case "${{ needs.gate.outputs.version }}" in
             *-*) echo "prerelease=true"  >> $GITHUB_OUTPUT ;;
             *)   echo "prerelease=false" >> $GITHUB_OUTPUT ;;
           esac
 
+      # 用算出来的实际版本构建：-Pmod_version 会覆盖 gradle.properties 里的值，
+      # 一路进产物名与描述符（fabric.mod.json / mods.toml / plugin.yml 里都是它）。
       - name: Build every platform and run the tests
-        run: ./gradlew clean build -PwithForge=true --stacktrace
+        run: ./gradlew clean build -PwithForge=true -Pmod_version=${{ needs.gate.outputs.version }} --stacktrace
 
       - name: Keep the jars
         uses: actions/upload-artifact@v7
         with:
-          name: mc-qq-${{ needs.platforms.outputs.version }}
+          name: mc-qq-${{ needs.gate.outputs.version }}
           path: |
             fabric/fabric-26.1/build/libs/mc-qq-*.jar
             neoforge/neoforge-26.1/build/libs/mc-qq-*.jar
@@ -144,14 +150,14 @@ jobs:
         shell: bash
         run: |
           JARS=$(printf '%s ' \
-            "fabric/fabric-26.1/build/libs/mc-qq-fabric-26.1-${{ needs.platforms.outputs.version }}.jar" \
-            "neoforge/neoforge-26.1/build/libs/mc-qq-neoforge-26.1-${{ needs.platforms.outputs.version }}.jar" \
-            "forge/forge-26.1/build/libs/mc-qq-forge-26.1-${{ needs.platforms.outputs.version }}.jar" \
-            "forge/forge-1.20.1/build/libs/mc-qq-forge-1.20.1-${{ needs.platforms.outputs.version }}.jar" \
-            "spigot/spigot-1.20.1/build/libs/mc-qq-spigot-1.20.1-${{ needs.platforms.outputs.version }}.jar" \
-            "paper/paper-1.20.1/build/libs/mc-qq-paper-1.20.1-${{ needs.platforms.outputs.version }}.jar")
+            "fabric/fabric-26.1/build/libs/mc-qq-fabric-26.1-${{ needs.gate.outputs.version }}.jar" \
+            "neoforge/neoforge-26.1/build/libs/mc-qq-neoforge-26.1-${{ needs.gate.outputs.version }}.jar" \
+            "forge/forge-26.1/build/libs/mc-qq-forge-26.1-${{ needs.gate.outputs.version }}.jar" \
+            "forge/forge-1.20.1/build/libs/mc-qq-forge-1.20.1-${{ needs.gate.outputs.version }}.jar" \
+            "spigot/spigot-1.20.1/build/libs/mc-qq-spigot-1.20.1-${{ needs.gate.outputs.version }}.jar" \
+            "paper/paper-1.20.1/build/libs/mc-qq-paper-1.20.1-${{ needs.gate.outputs.version }}.jar")
           # 标签由 gh 顺手打在当前 HEAD（也就是刚合进 main 的那个提交）上。
-          TAG="v${{ needs.platforms.outputs.version }}"
+          TAG="v${{ needs.gate.outputs.version }}"
           if [ "${{ steps.tag.outputs.prerelease }}" = "true" ]; then
             gh release create "$TAG" --generate-notes --prerelease $JARS
           else
@@ -175,7 +181,7 @@ jobs:
       - name: Fetch the jars built by the previous job
         uses: actions/download-artifact@v8
         with:
-          name: mc-qq-${{ needs.platforms.outputs.version }}
+          name: mc-qq-${{ needs.gate.outputs.version }}
           path: jars
 
       - name: Publish ${{ matrix.name }}
@@ -185,9 +191,9 @@ jobs:
           modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
           curseforge-id: ${{ env.CURSEFORGE_ID }}
           curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
-          name: mc-qq ${{ needs.platforms.outputs.version }} (${{ matrix.name }})
+          name: mc-qq ${{ needs.gate.outputs.version }} (${{ matrix.name }})
           # 同一版本号的多个产物必须能区分开，所以加 loader 后缀。
-          version: ${{ needs.platforms.outputs.version }}+${{ matrix.name }}
+          version: ${{ needs.gate.outputs.version }}+${{ matrix.name }}
           version-type: ${{ needs.build.outputs.prerelease == 'true' && 'beta' || 'release' }}
           loaders: ${{ matrix.loaders }}
           # 每个窗口各自声明（`publish_game_versions_*`）：26.x 的 jar 装不到 1.20.1 上，共用一份列表会误导人。
