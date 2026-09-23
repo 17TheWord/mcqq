@@ -1,34 +1,28 @@
 <div align="right">
-
 🌍 English / <a href="README.md">中文</a>
-
 </div>
 
 <div align="center">
 
-<h1>MC ↔ QQ Bot</h1>
+# MC ↔ QQ Bot
 
-<p>✨ Connects QQ with a Minecraft server ✨</p>
+✨ Connects QQ with a Minecraft server ✨
 
 </div>
 
 <p align="center">
-
 <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="license"></a> <a href="https://github.com/17TheWord/mcqq/releases"><img src="https://img.shields.io/github/v/release/17TheWord/mcqq" alt="release"></a> <img src="https://img.shields.io/badge/Minecraft-1.20.1--26.2-blue" alt="minecraft">
-
 </p>
 
 <p align="center">
-
 <a href="https://fabricmc.net"><img src="https://img.shields.io/badge/Fabric-supported-blue" alt="fabric"></a> <a href="https://neoforged.net"><img src="https://img.shields.io/badge/NeoForge-supported-blue" alt="neoforge"></a> <a href="https://files.minecraftforge.net"><img src="https://img.shields.io/badge/Forge-supported-blue" alt="forge"></a> <a href="https://papermc.io"><img src="https://img.shields.io/badge/Paper-supported-blue" alt="paper"></a> <a href="https://www.spigotmc.org"><img src="https://img.shields.io/badge/Spigot-supported-blue" alt="spigot"></a>
-
 </p>
 
+<!-- Download links: replace both slugs with the real ones once the projects are approved -->
 <p align="center">
-
-<a href="https://github.com/17TheWord/mcqq/releases">⬇️ Download</a>
+<a href="https://modrinth.com/plugin/mc-qq">⬇️ Modrinth</a>
+· <a href="https://www.curseforge.com/minecraft/mc-mods/mc-qq">⬇️ CurseForge</a>
 · <a href="https://github.com/17TheWord/mcqq/issues">🐛 Report an issue</a>
-
 </p>
 
 ## Introduction
@@ -84,7 +78,7 @@ Choose the Paper or Spigot build for the corresponding platform. If the platform
 
 ## Quick start
 
-Download the build for your platform from [Releases](https://github.com/17TheWord/mcqq/releases):
+Download the build for your platform from [Modrinth](https://modrinth.com/plugin/mc-qq) or [CurseForge](https://www.curseforge.com/minecraft/mc-mods/mc-qq):
 
 * Put the Mod into `mods/`
 * Put the Plugin into `plugins/`
@@ -294,6 +288,10 @@ To also build Forge:
 ```bash
 ./gradlew build -PwithForge=true
 ```
+
+## Usage notice
+
+This project only provides message and event forwarding between Minecraft and QQ. Users must comply with applicable laws and regulations as well as the rules of the QQ Open Platform, and are responsible for the content sent through this project and for how they use it.
 
 ## License
 

@@ -1,34 +1,28 @@
 <div align="right">
-
 🌍 <a href="README_EN.md">English</a> / 中文
-
 </div>
 
 <div align="center">
 
-<h1>MC ↔ QQ Bot</h1>
+# MC ↔ QQ Bot
 
-<p>✨ 将 QQ 与 Minecraft 服务端连接起来 ✨</p>
+✨ 将 QQ 与 Minecraft 服务端连接起来 ✨
 
 </div>
 
 <p align="center">
-
 <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="license"></a> <a href="https://github.com/17TheWord/mcqq/releases"><img src="https://img.shields.io/github/v/release/17TheWord/mcqq" alt="release"></a> <img src="https://img.shields.io/badge/Minecraft-1.20.1--26.2-blue" alt="minecraft">
-
 </p>
 
 <p align="center">
-
 <a href="https://fabricmc.net"><img src="https://img.shields.io/badge/Fabric-supported-blue" alt="fabric"></a> <a href="https://neoforged.net"><img src="https://img.shields.io/badge/NeoForge-supported-blue" alt="neoforge"></a> <a href="https://files.minecraftforge.net"><img src="https://img.shields.io/badge/Forge-supported-blue" alt="forge"></a> <a href="https://papermc.io"><img src="https://img.shields.io/badge/Paper-supported-blue" alt="paper"></a> <a href="https://www.spigotmc.org"><img src="https://img.shields.io/badge/Spigot-supported-blue" alt="spigot"></a>
-
 </p>
 
+<!-- 下载入口：审核通过后把这两个 slug 换成实际值（Modrinth 的 slug 和 CurseForge 的 slug 可能不一样） -->
 <p align="center">
-
-<a href="https://github.com/17TheWord/mcqq/releases">⬇️ 下载</a>
+<a href="https://modrinth.com/plugin/mc-qq">⬇️ Modrinth</a>
+· <a href="https://www.curseforge.com/minecraft/mc-mods/mc-qq">⬇️ CurseForge</a>
 · <a href="https://github.com/17TheWord/mcqq/issues">🐛 反馈问题</a>
-
 </p>
 
 ## 介绍
@@ -84,7 +78,7 @@ Paper 系和 Spigot 系请选择对应的平台安装。检测到平台不匹配
 
 ## 快速开始
 
-从 [Releases](https://github.com/17TheWord/mcqq/releases) 下载对应平台的版本：
+从 [Modrinth](https://modrinth.com/plugin/mc-qq) 或 [CurseForge](https://www.curseforge.com/minecraft/mc-mods/mc-qq) 下载对应平台的版本：
 
 * Mod 放入 `mods/`
 * Plugin 放入 `plugins/`
@@ -294,6 +288,10 @@ templates:
 ```bash
 ./gradlew build -PwithForge=true
 ```
+
+## 使用说明
+
+本项目仅提供 Minecraft 与 QQ 之间的消息和事件转发能力。请遵守相关法律法规及 QQ 开放平台规则，并对本项目的使用行为和发送内容负责。
 
 ## 开源许可
 

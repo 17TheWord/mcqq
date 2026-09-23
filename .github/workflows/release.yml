@@ -16,6 +16,8 @@ name: Release
 # 带后缀 = 预发布（`--prerelease`，Modrinth 上的 version-type 也是 beta），
 # **beta 同样上架 Modrinth / CurseForge**。
 #
+# ⚠️ GitHub Release **只放自动生成的变更日志，不带 jar** —— 下载入口是 Modrinth / CurseForge。
+#
 # ⚠️ 版本号没变就不发：**检测到 v<版本> 标签已存在就停**，不删了重建。
 # 这样"发版"是一个**明确的动作**（在 dev 上改 mod_version，再合 PR），
 # 而不是"每次合并的副作用"；也不会出现"同一个版本被反复发布"。
@@ -128,7 +130,9 @@ jobs:
       - name: Build every platform and run the tests
         run: ./gradlew clean build -PwithForge=true -Pmod_version=${{ needs.gate.outputs.version }} --stacktrace
 
-      - name: Keep the jars
+      # 产物只传给下面的 publish job（它用 download-artifact 取），不进 Release。
+      # ⚠️ Actions artifacts 默认 90 天过期，所以长期归档只有 Modrinth / CurseForge 那两份。
+      - name: Keep the jars for the publish job
         uses: actions/upload-artifact@v7
         with:
           name: mc-qq-${{ needs.gate.outputs.version }}
@@ -141,24 +145,23 @@ jobs:
             paper/paper-1.20.1/build/libs/mc-qq-*.jar
           if-no-files-found: error
 
-      - name: Create the release and attach the jars
+      # Release **只放自动生成的变更日志，不带任何 jar**。
+      # 下载入口在 Modrinth / CurseForge（README 指向那边）：平台有社区、有分类与依赖信息，
+      # 而且下载量算数。GitHub 这边再挂一份只会分流。
+      # 标签由 gh 顺手打在当前 HEAD（也就是刚合进 main 的那个提交）上。
+      - name: Create the release with generated notes
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          JARS=$(printf '%s ' \
-            "fabric/fabric-26.1/build/libs/mc-qq-fabric-26.1-${{ needs.gate.outputs.version }}.jar" \
-            "neoforge/neoforge-26.1/build/libs/mc-qq-neoforge-26.1-${{ needs.gate.outputs.version }}.jar" \
-            "forge/forge-26.1/build/libs/mc-qq-forge-26.1-${{ needs.gate.outputs.version }}.jar" \
-            "forge/forge-1.20.1/build/libs/mc-qq-forge-1.20.1-${{ needs.gate.outputs.version }}.jar" \
-            "spigot/spigot-1.20.1/build/libs/mc-qq-spigot-1.20.1-${{ needs.gate.outputs.version }}.jar" \
-            "paper/paper-1.20.1/build/libs/mc-qq-paper-1.20.1-${{ needs.gate.outputs.version }}.jar")
-          # 标签由 gh 顺手打在当前 HEAD（也就是刚合进 main 的那个提交）上。
           TAG="v${{ needs.gate.outputs.version }}"
+          # ⚠️ 必须带 --target：不带的话 gh 会把标签打**默认分支的最新提交**上
+          # （官方手册："automatically get created from the latest state of the default branch"），
+          # 于是在 feature 分支发 beta 时，标签会指到 main 去。GITHUB_SHA 就是这次运行的那个提交。
           if [ "${{ steps.tag.outputs.prerelease }}" = "true" ]; then
-            gh release create "$TAG" --generate-notes --prerelease $JARS
+            gh release create "$TAG" --generate-notes --prerelease --target "$GITHUB_SHA"
           else
-            gh release create "$TAG" --generate-notes $JARS
+            gh release create "$TAG" --generate-notes --target "$GITHUB_SHA"
           fi
 
   publish:

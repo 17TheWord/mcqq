@@ -17,7 +17,7 @@ PR (dev→main) → test.yml 跑矩阵（每个平台一格，并行）
 | --- | --- |
 | `platforms` | 复用 `platforms.yml`：从 `gradle.properties` 读出版本事实，并生成平台矩阵 |
 | `gate` | **版本号变了才发**：`v<版本>` 的标签已存在 → 整个工作流跳过 |
-| `build` | 一次 `./gradlew clean build -PwithForge=true` 出全部产物 → 存 artifact → `gh release create v<版本> --generate-notes` 并附上 6 个 jar |
+| `build` | 一次 `./gradlew clean build -PwithForge=true` 出全部产物 → 存 artifact → `gh release create v<版本> --generate-notes`（**只放变更日志，不带 jar**） |
 | `publish` | 按矩阵每格跑一次 `mc-publish`（Modrinth / CurseForge）。没配项目 id 就整段跳过 |
 
 ## ⚠️ 两个容易踩的点
@@ -71,6 +71,10 @@ git push --delete origin v0.0.1     # 删标签（release 也要在 GitHub 上�
 
 **没配也不会失败** —— `publish` 整个 job 跳过，构建、Actions artifacts 与 GitHub Release 照常。
 想先手动传，就从那次 Actions 运行的 artifacts 里下载对应的 jar。
+
+⚠️ **GitHub Release 不带 jar** —— 下载入口只有 Modrinth / CurseForge（平台有社区、有分类与依赖信息，
+下载量也算数；GitHub 再挂一份只会分流）。
+⚠️ Actions artifacts **默认 90 天过期**，所以长期归档只有平台上那两份。
 
 `game-versions` 是**每个窗口一份**（`publish_game_versions_26_1` / `_1_20_1`）。
 ⚠️ spigot / paper 两份是例外：它们**一个 jar 覆盖 1.20.1 → 26.x**，
