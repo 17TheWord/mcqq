@@ -65,22 +65,26 @@ PR (dev→main) → test.yml 跑矩阵（每个平台一格，并行）
 
 所以 feature 分支上想发个测试版：
 
-1. 在**那个分支**上把 `gradle.properties` 的 `mod_version` 改成带后缀的版本
-   （`0.0.1-beta.1` / `0.0.1-rc.1` —— **必须带后缀**）
+1. `gradle.properties` 里**照常写正式版本号**（`0.0.1` / `0.0.2`）—— **不用手写 `-beta.N`**
 2. Actions → Release → Run workflow → 选那个分支
 
-**带后缀 = 预发布**：`gh release create --prerelease`，Modrinth 上的 version-type 也是 beta。
+**后缀是工作流自己加的**：非 main 分支上，实际发布版本会变成 `<版本>-beta.<短 sha>`，
+例如 `0.0.1-beta.a1b2c3d`。
 
-⚠️ **非 main 分支上不允许发不带后缀的版本**（gate 会直接 `::error::` 并停）。
-原因：那样 `v0.0.1` 这个**正式标签会打在 feature 分支上**，之后真正的 `0.0.1`
-就永远发不出去了（闸门会一直跳过）。
+* 构建时用 `-Pmod_version=<实际版本>` 覆盖 —— 它一路进产物名**与描述符**
+  （`fabric.mod.json` / `mods.toml` / `plugin.yml` 里都是它）
+* 带后缀 = 预发布（`gh release create --prerelease`，Modrinth 上 version-type 也是 beta）
+* **用短 sha 而不是固定的 `-beta`**：同一个提交得到的版本是固定的（重跑不会变），
+  不同提交也不会撞。固定 `-beta` 的话，同一个分支发第二次就会因为标签已存在而被闸门挡住
+* 版本号**已经**带后缀时（比如你手动写了 `0.0.1-beta.9`）就不再追加
+
+⚠️ 所以 `v0.0.1-beta.a1b2c3d` 与 `v0.0.1` 是两个不同的标签，**正式版不会被它挡住**。
 
 ⚠️ **非 main 分支不上架商店** —— `publish` job 加了 `github.ref_name == 'main'`，
 分支上的测试版只留 GitHub Release（从那次运行的 artifacts 里也能下 jar）。
 想让分支版本也上架，把那个条件去掉即可。
 
-⚠️ **别忘了改回来**：分支合进 main 之前，把 `mod_version` 改回正式版本号
-（或者下一次发版时改），否则 main 上会带着一个 `-beta.N` 的版本。
+⚠️ **分支上不用改版本号**（加了后缀是工作流做的），所以合并进 main 之后也不会残留 `-beta.N` ✓。
 
 ## 要重发同一个版本
 
