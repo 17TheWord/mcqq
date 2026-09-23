@@ -30,6 +30,30 @@ PR (dev→main) → test.yml 跑矩阵（每个平台一格，并行）
 **② 闸门查的是标签，不是 release。**
 标签才是"这个版本发过没有"的唯一依据，也顺带挡住"只打了标签、没建 release"那种半成品状态。
 
+## 在分支上发测试版
+
+`release.yml` 的**手动入口可以选分支** —— Actions → Release → Run workflow 里那个
+"Use workflow from" 下拉框选任何分支，跑的是**那个分支上的工作流文件**。
+
+所以 feature 分支上想发个测试版：
+
+1. 在**那个分支**上把 `gradle.properties` 的 `mod_version` 改成带后缀的版本
+   （`0.0.1-beta.1` / `0.0.1-rc.1` —— **必须带后缀**）
+2. Actions → Release → Run workflow → 选那个分支
+
+**带后缀 = 预发布**：`gh release create --prerelease`，Modrinth 上的 version-type 也是 beta。
+
+⚠️ **非 main 分支上不允许发不带后缀的版本**（gate 会直接 `::error::` 并停）。
+原因：那样 `v0.0.1` 这个**正式标签会打在 feature 分支上**，之后真正的 `0.0.1`
+就永远发不出去了（闸门会一直跳过）。
+
+⚠️ **非 main 分支不上架商店** —— `publish` job 加了 `github.ref_name == 'main'`，
+分支上的测试版只留 GitHub Release（从那次运行的 artifacts 里也能下 jar）。
+想让分支版本也上架，把那个条件去掉即可。
+
+⚠️ **别忘了改回来**：分支合进 main 之前，把 `mod_version` 改回正式版本号
+（或者下一次发版时改），否则 main 上会带着一个 `-beta.N` 的版本。
+
 ## 要重发同一个版本
 
 闸门会挡住（标签还在）。做法是**先删掉那个标签**，再手动跑一次 `release.yml`（`workflow_dispatch`）：

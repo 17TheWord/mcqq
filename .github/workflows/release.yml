@@ -10,6 +10,11 @@ name: Release
 # 所以"一个工作流打 tag、另一个挂 tag 触发"那种写法，后者永远不会跑。
 # 鹊桥（17TheWord/QueQiao）也是因此让 build 与 release 都挂 push: main。
 #
+# **手动入口可以选分支**：feature 分支上想发测试版，就在那儿把 mod_version 改成
+# 0.0.1-beta.1（**必须带后缀**），然后在 Actions 里选那个分支手动跑。
+# 带后缀 = 预发布（`--prerelease`，Modrinth 上 version-type 也是 beta）；
+# 非 main 分支**不上架商店**，只留 GitHub Release。
+#
 # ⚠️ 版本号没变就不发：**检测到 v<版本> 标签已存在就停**，不删了重建。
 # 这样"发版"是一个**明确的动作**（在 dev 上改 mod_version，再合 PR），
 # 而不是"每次合并的副作用"；也不会出现"同一个版本被反复发布"。
@@ -64,6 +69,23 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.platforms.outputs.version }}
         run: |
+          # 非 main 分支上只能发**预发布**版本。
+          # 手动入口（workflow_dispatch）可以选任何分支，这是有意的：feature 分支上想发个
+          # 测试版就在那儿把 mod_version 改成 0.0.1-beta.1 再手动跑。
+          # ⚠️ 但版本号**必须带后缀** —— 否则 v0.0.1 这个正式标签会打在 feature 分支上，
+          # 之后真正的 0.0.1 就永远发不出去了（闸门会一直跳过）。
+          if [ "${{ github.ref_name }}" != "main" ]; then
+            case "$VERSION" in
+              *-*)
+                echo "分支 ${{ github.ref_name }} 上发预发布版本 $VERSION ✓"
+                ;;
+              *)
+                echo "::error::分支 ${{ github.ref_name }} 上只能发预发布版本 —— 版本号要带后缀（0.0.1-beta.1 / 0.0.1-rc.1）。现在是 $VERSION，如果就这么发，v$VERSION 这个标签会落在分支上，正式发布就再也发不出去了。"
+                exit 1
+                ;;
+            esac
+          fi
+
           if gh api "repos/${{ github.repository }}/git/ref/tags/v$VERSION" >/dev/null 2>&1; then
             echo "release=false" >> $GITHUB_OUTPUT
             echo "::notice::v$VERSION 的标签已经存在，版本号没变，跳过发布。要重发就先删掉那个标签。"
@@ -139,7 +161,9 @@ jobs:
   publish:
     needs: [ platforms, gate, build ]
     # 没有项目 id 就整段跳过：这一步是"上架"，不是"发版"。
-    if: needs.gate.outputs.release == 'true' && (vars.MODRINTH_ID != '' || vars.CURSEFORGE_ID != '')
+    # 非 main 分支也跳过 —— feature 分支上发的测试版只留 GitHub Release，不上架商店。
+    if: needs.gate.outputs.release == 'true' && github.ref_name == 'main'
+        && (vars.MODRINTH_ID != '' || vars.CURSEFORGE_ID != '')
     runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
