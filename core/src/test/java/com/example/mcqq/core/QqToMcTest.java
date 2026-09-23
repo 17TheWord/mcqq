@@ -169,7 +169,7 @@ class QqToMcTest {
                 new ConsoleRunner(Runnable::run));
     }
 
-    private static QQMessageEvent group(String id, String groupOpenid, String content,
+    private QQMessageEvent group(String id, String groupOpenid, String content,
             String openid, String role) {
         JsonObject data = JsonParser.parseString("{\"group_openid\":\"" + groupOpenid
                 + "\",\"content\":\"" + content + "\",\"author\":{\""
@@ -179,7 +179,7 @@ class QqToMcTest {
                 EventType.GROUP_MESSAGE_CREATE, data, recorder());
     }
 
-    private static QQMessageEvent direct(String id, String openid, String content) {
+    private QQMessageEvent direct(String id, String openid, String content) {
         JsonObject data = JsonParser.parseString("{\"user_openid\":\"" + openid
                 + "\",\"content\":\"" + content + "\",\"author\":{\"user_openid\":\""
                 + openid + "\",\"username\":\"某人\"}}").getAsJsonObject();
