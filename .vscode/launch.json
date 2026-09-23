@@ -1,0 +1,27 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "java",
+      "request": "launch",
+      "name": "neoforge-26.1 - Server",
+      "presentation": {
+        "group": "Mod Development - neoforge-26.1",
+        "order": 0
+      },
+      "projectName": "neoforge-26.1",
+      "mainClass": "net.neoforged.devlaunch.Main",
+      "args": [
+        "@D:\\Project\\Java\\mc-qq\\neoforge\\neoforge-26.1\\build\\moddev\\serverRunProgramArgs.txt"
+      ],
+      "vmArgs": [
+        "@D:\\Project\\Java\\mc-qq\\neoforge\\neoforge-26.1\\build\\moddev\\serverRunVmArgs.txt",
+        "-Dfml.modFolders\u003dmcqq%%D:\\Project\\Java\\mc-qq\\neoforge\\neoforge-26.1\\bin\\main"
+      ],
+      "cwd": "${workspaceFolder}\\neoforge\\neoforge-26.1\\run",
+      "env": {},
+      "console": "internalConsole",
+      "shortenCommandLine": "none"
+    }
+  ]
+}
