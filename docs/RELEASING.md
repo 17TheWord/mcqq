@@ -32,59 +32,24 @@ PR (dev→main) → test.yml 跑矩阵（每个平台一格，并行）
 
 ## 在分支上发测试版
 
-`release.yml` 的**手动入口可以选分支** —— Actions → Release → Run workflow 里那个
-"Use workflow from" 下拉框选任何分支，跑的是**那个分支上的工作流文件**。
+**在 Actions → Release → Run workflow 里选任何分支**即可 —— 跑的是那个分支上的工作流文件。
 
-所以 feature 分支上想发个测试版：
-
-1. `gradle.properties` 里**照常写正式版本号**（`0.0.1` / `0.0.2`）—— **不用手写 `-beta.N`**
+1. `gradle.properties` 里**照常写正式版本号**（`0.0.1` / `0.0.2`）—— 不用手写 `-beta`
 2. Actions → Release → Run workflow → 选那个分支
 
-**后缀是工作流自己加的**：非 main 分支上，实际发布版本会变成 `<版本>-beta.<短 sha>`，
-例如 `0.0.1-beta.a1b2c3d`。
+**后缀是工作流自己加的**：非 main 分支上，实际发布版本是 `<版本>-beta`，例如 `0.0.1-beta`。
+（版本号**已经**带后缀时不再追加。）
 
 * 构建时用 `-Pmod_version=<实际版本>` 覆盖 —— 它一路进产物名**与描述符**
   （`fabric.mod.json` / `mods.toml` / `plugin.yml` 里都是它）
-* 带后缀 = 预发布（`gh release create --prerelease`，Modrinth 上 version-type 也是 beta）
-* **用短 sha 而不是固定的 `-beta`**：同一个提交得到的版本是固定的（重跑不会变），
-  不同提交也不会撞。固定 `-beta` 的话，同一个分支发第二次就会因为标签已存在而被闸门挡住
-* 版本号**已经**带后缀时（比如你手动写了 `0.0.1-beta.9`）就不再追加
+* **beta 同样上架 Modrinth / CurseForge** —— 测试版就是发过去给人测的，
+  带后缀时 mc-publish 的 version-type 自动是 `beta`
+* `v0.0.1-beta` 与 `v0.0.1` 是两个不同的标签，正式版不会被它挡住
 
-⚠️ 所以 `v0.0.1-beta.a1b2c3d` 与 `v0.0.1` 是两个不同的标签，**正式版不会被它挡住**。
+⚠️ **同一个分支发第二次**：`v0.0.1-beta` 的标签已经存在 → 闸门会跳过（`release=false`）。
+要再发一次，先删掉那个标签，或者把 `mod_version` 改成 `0.0.2`。
 
-⚠️ **非 main 分支不上架商店** —— `publish` job 加了 `github.ref_name == 'main'`，
-分支上的测试版只留 GitHub Release（从那次运行的 artifacts 里也能下 jar）。
-想让分支版本也上架，把那个条件去掉即可。
-
-⚠️ **分支上不用改版本号**（加了后缀是工作流做的），所以合并进 main 之后也不会残留 `-beta.N` ✓。
-
-## 在分支上发测试版
-
-`release.yml` 的**手动入口可以选分支** —— Actions → Release → Run workflow 里那个
-"Use workflow from" 下拉框选任何分支，跑的是**那个分支上的工作流文件**。
-
-所以 feature 分支上想发个测试版：
-
-1. `gradle.properties` 里**照常写正式版本号**（`0.0.1` / `0.0.2`）—— **不用手写 `-beta.N`**
-2. Actions → Release → Run workflow → 选那个分支
-
-**后缀是工作流自己加的**：非 main 分支上，实际发布版本会变成 `<版本>-beta.<短 sha>`，
-例如 `0.0.1-beta.a1b2c3d`。
-
-* 构建时用 `-Pmod_version=<实际版本>` 覆盖 —— 它一路进产物名**与描述符**
-  （`fabric.mod.json` / `mods.toml` / `plugin.yml` 里都是它）
-* 带后缀 = 预发布（`gh release create --prerelease`，Modrinth 上 version-type 也是 beta）
-* **用短 sha 而不是固定的 `-beta`**：同一个提交得到的版本是固定的（重跑不会变），
-  不同提交也不会撞。固定 `-beta` 的话，同一个分支发第二次就会因为标签已存在而被闸门挡住
-* 版本号**已经**带后缀时（比如你手动写了 `0.0.1-beta.9`）就不再追加
-
-⚠️ 所以 `v0.0.1-beta.a1b2c3d` 与 `v0.0.1` 是两个不同的标签，**正式版不会被它挡住**。
-
-⚠️ **非 main 分支不上架商店** —— `publish` job 加了 `github.ref_name == 'main'`，
-分支上的测试版只留 GitHub Release（从那次运行的 artifacts 里也能下 jar）。
-想让分支版本也上架，把那个条件去掉即可。
-
-⚠️ **分支上不用改版本号**（加了后缀是工作流做的），所以合并进 main 之后也不会残留 `-beta.N` ✓。
+⚠️ **分支上不用改 `mod_version`**（后缀是工作流加的），所以合并进 main 之后也不会残留 `-beta` ✓。
 
 ## 要重发同一个版本
 

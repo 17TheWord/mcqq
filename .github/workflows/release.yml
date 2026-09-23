@@ -11,10 +11,10 @@ name: Release
 # 鹊桥（17TheWord/QueQiao）也是因此让 build 与 release 都挂 push: main。
 #
 # **手动入口可以选分支**：在 Actions → Release → Run workflow 里选任何分支即可。
-# 非 main 分支上，实际发布版本会**自动加上 -beta.<短 sha>**（见 gate），
-# 所以 gradle.properties 里永远只写正式号（0.0.1 / 0.0.2），不用手写 -beta.N。
-# 带后缀 = 预发布（`--prerelease`，Modrinth 上 version-type 也是 beta）；
-# 非 main 分支**不上架商店**，只留 GitHub Release。
+# 非 main 分支上，实际发布版本会**自动加上 -beta**（见 gate），
+# 所以 gradle.properties 里只写正式号（0.0.1 / 0.0.2），不用手写 -beta。
+# 带后缀 = 预发布（`--prerelease`，Modrinth 上的 version-type 也是 beta），
+# **beta 同样上架 Modrinth / CurseForge**。
 #
 # ⚠️ 版本号没变就不发：**检测到 v<版本> 标签已存在就停**，不删了重建。
 # 这样"发版"是一个**明确的动作**（在 dev 上改 mod_version，再合 PR），
@@ -71,10 +71,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.gate.outputs.version }}
         run: |
-          # 实际发布版本：**非 main 分支自动加 -beta.<短 sha> 后缀**。
-          # 所以 gradle.properties 里永远只写正式号（0.0.1 / 0.0.2），不用手写 -beta.N。
-          # 用短 sha 而不是 -beta.N：同一个提交得到的版本是固定的，重跑不会变；
-          # 不同提交也不会撞（`-beta` 固定后缀的话，同一个分支第二次就发不出去了 —— 标签已存在）。
+          # 实际发布版本：**非 main 分支自动加 -beta 后缀**。
+          # 所以 gradle.properties 里只写正式号（0.0.1 / 0.0.2），不用手写 -beta。
           EFFECTIVE="$VERSION"
           if [ "${{ github.ref_name }}" != "main" ]; then
             case "$VERSION" in
@@ -82,8 +80,7 @@ jobs:
                 echo "版本号已经带后缀了（$VERSION），不再追加。"
                 ;;
               *)
-                SHORT=$(echo "${{ github.sha }}" | cut -c1-7)
-                EFFECTIVE="$VERSION-beta.$SHORT"
+                EFFECTIVE="$VERSION-beta"
                 echo "非 main 分支（${{ github.ref_name }}）→ 实际发布版本 $EFFECTIVE"
                 ;;
             esac
@@ -167,8 +164,9 @@ jobs:
   publish:
     needs: [ platforms, gate, build ]
     # 没有项目 id 就整段跳过：这一步是"上架"，不是"发版"。
-    # 非 main 分支也跳过 —— feature 分支上发的测试版只留 GitHub Release，不上架商店。
-    if: needs.gate.outputs.release == 'true' && github.ref_name == 'main'
+    # **beta 也照常上架** —— 测试版就是发到 Modrinth / CurseForge 上给人测的，
+    # 版本号带后缀时 mc-publish 的 version-type 会自动是 beta。
+    if: needs.gate.outputs.release == 'true'
         && (vars.MODRINTH_ID != '' || vars.CURSEFORGE_ID != '')
     runs-on: ubuntu-26.04
     strategy:
