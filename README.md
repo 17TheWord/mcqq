@@ -18,10 +18,10 @@
 <a href="https://fabricmc.net"><img src="https://img.shields.io/badge/Fabric-supported-blue" alt="fabric"></a> <a href="https://neoforged.net"><img src="https://img.shields.io/badge/NeoForge-supported-blue" alt="neoforge"></a> <a href="https://files.minecraftforge.net"><img src="https://img.shields.io/badge/Forge-supported-blue" alt="forge"></a> <a href="https://papermc.io"><img src="https://img.shields.io/badge/Paper-supported-blue" alt="paper"></a> <a href="https://www.spigotmc.org"><img src="https://img.shields.io/badge/Spigot-supported-blue" alt="spigot"></a>
 </p>
 
-<!-- 下载入口：审核通过后把这两个 slug 换成实际值（Modrinth 的 slug 和 CurseForge 的 slug 可能不一样） -->
+<!-- 下载入口：Modrinth 的 slug 已确认是 mcqq；CurseForge 那个还等审核通过后确认 -->
 <p align="center">
-<a href="https://modrinth.com/plugin/mc-qq">⬇️ Modrinth</a>
-· <a href="https://www.curseforge.com/minecraft/mc-mods/mc-qq">⬇️ CurseForge</a>
+<a href="https://modrinth.com/mod/mcqq">⬇️ Modrinth</a>
+<!-- · <a href="https://www.curseforge.com/minecraft/mc-mods/mc-qq">⬇️ CurseForge</a> -->
 · <a href="https://github.com/17TheWord/mcqq/issues">🐛 反馈问题</a>
 </p>
 
@@ -78,7 +78,7 @@ Paper 系和 Spigot 系请选择对应的平台安装。检测到平台不匹配
 
 ## 快速开始
 
-从 [Modrinth](https://modrinth.com/plugin/mc-qq) 或 [CurseForge](https://www.curseforge.com/minecraft/mc-mods/mc-qq) 下载对应平台的版本：
+从 [Modrinth](https://modrinth.com/plugin/mcqq) 或 [CurseForge](https://www.curseforge.com/minecraft/mc-mods/mc-qq) 下载对应平台的版本：
 
 * Mod 放入 `mods/`
 * Plugin 放入 `plugins/`

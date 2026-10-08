@@ -18,10 +18,10 @@
 <a href="https://fabricmc.net"><img src="https://img.shields.io/badge/Fabric-supported-blue" alt="fabric"></a> <a href="https://neoforged.net"><img src="https://img.shields.io/badge/NeoForge-supported-blue" alt="neoforge"></a> <a href="https://files.minecraftforge.net"><img src="https://img.shields.io/badge/Forge-supported-blue" alt="forge"></a> <a href="https://papermc.io"><img src="https://img.shields.io/badge/Paper-supported-blue" alt="paper"></a> <a href="https://www.spigotmc.org"><img src="https://img.shields.io/badge/Spigot-supported-blue" alt="spigot"></a>
 </p>
 
-<!-- Download links: replace both slugs with the real ones once the projects are approved -->
+<!-- Download links: the Modrinth slug is confirmed as mcqq; the CurseForge one is still pending approval -->
 <p align="center">
-<a href="https://modrinth.com/plugin/mc-qq">⬇️ Modrinth</a>
-· <a href="https://www.curseforge.com/minecraft/mc-mods/mc-qq">⬇️ CurseForge</a>
+<a href="https://modrinth.com/mod/mcqq">⬇️ Modrinth</a>
+<!-- · <a href="https://www.curseforge.com/minecraft/mc-mods/mc-qq">⬇️ CurseForge</a> -->
 · <a href="https://github.com/17TheWord/mcqq/issues">🐛 Report an issue</a>
 </p>
 
@@ -78,7 +78,7 @@ Choose the Paper or Spigot build for the corresponding platform. If the platform
 
 ## Quick start
 
-Download the build for your platform from [Modrinth](https://modrinth.com/plugin/mc-qq) or [CurseForge](https://www.curseforge.com/minecraft/mc-mods/mc-qq):
+Download the build for your platform from [Modrinth](https://modrinth.com/plugin/mcqq) or [CurseForge](https://www.curseforge.com/minecraft/mc-mods/mc-qq):
 
 * Put the Mod into `mods/`
 * Put the Plugin into `plugins/`
