@@ -42,6 +42,8 @@ val resourceFacts = mapOf(
     "mod_license" to property("mod_license").toString(),
     "mod_url" to property("mod_url").toString(),
     "mod_description" to property("mod_description").toString(),
+    // fabric.mod.json 的 depends 也引用它：没装 Fabric API 时加载器要给"缺少依赖"，而不是 NoClassDefFoundError。
+    "fabric_api_version" to property("fabric_api_version").toString(),
 )
 
 tasks.processResources {

@@ -1,0 +1,23 @@
+<svg viewBox="0 0 680 680" width="680" height="680" role="img" xmlns="http://www.w3.org/2000/svg">
+  <title>mc-qq</title>
+  <desc>A thin QQ-blue ring around a solid isometric Minecraft grass block, in three flat tones with a drippy grass boundary, and a small robot head inside.</desc>
+
+  <circle cx="340" cy="340" r="252" fill="none" stroke="#12B7F5" stroke-width="10"/>
+
+  <path d="M340,152 L519,242 L340,332 L161,242 Z" fill="#8CC152"/>
+
+  <path d="M161,242 L340,332 L340,364 L300,343 L300,359 L262,340 L262,324 L228,307 L228,323 L198,308 L198,292 L161,276 Z" fill="#6FA843"/>
+  <path d="M161,276 L198,292 L198,308 L228,323 L228,307 L262,324 L262,340 L300,359 L300,343 L340,364 L340,525 L161,435 Z" fill="#8B6244"/>
+
+  <path d="M519,242 L340,332 L340,364 L380,343 L380,359 L418,340 L418,324 L452,307 L452,323 L482,308 L482,292 L519,276 Z" fill="#6FA843"/>
+  <path d="M519,276 L482,292 L482,308 L452,323 L452,307 L418,324 L418,340 L380,359 L380,343 L340,364 L340,525 L519,435 Z" fill="#8B6244"/>
+
+  <g fill="none" stroke="#12B7F5" stroke-width="9" stroke-linejoin="round" stroke-linecap="round">
+    <rect x="294" y="300" width="92" height="80" rx="21"/>
+    <path d="M340,300 L340,278"/>
+  </g>
+  <circle cx="340" cy="269" r="9" fill="#12B7F5"/>
+  <circle cx="321" cy="331" r="8" fill="#12B7F5"/>
+  <circle cx="359" cy="331" r="8" fill="#12B7F5"/>
+  <path d="M328,359 L352,359" fill="none" stroke="#12B7F5" stroke-width="9" stroke-linecap="round"/>
+</svg>

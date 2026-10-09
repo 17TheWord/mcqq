@@ -94,7 +94,8 @@ class BindFlowTest {
                         label: 主群
                 """);
         UnboundGroups unbound = new UnboundGroups();
-        QqToMc listener = new QqToMc(headless(), config, config.bots().get(0), unbound);
+        QqToMc listener = new QqToMc(headless(), config, config.bots().get(0), unbound,
+                new ConsoleRunner(Runnable::run));
 
         listener.onGroupMessage(message("m1", "NEWGROUP"));
         listener.onGroupMessage(message("m2", "NEWGROUP"));

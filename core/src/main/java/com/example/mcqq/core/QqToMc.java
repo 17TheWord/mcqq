@@ -47,25 +47,37 @@ public final class QqToMc {
     };
 
     public QqToMc(MinecraftPlatform platform, BridgeConfig config, BridgeConfig.Bot bot,
-            UnboundGroups unbound) {
+            UnboundGroups unbound, ConsoleRunner console) {
         this.platform = platform;
         this.config = config;
         this.bot = bot;
         this.botId = bot.id();
         this.unbound = unbound;
-        this.commands = new McCommands(platform, config, bot);
+        this.commands = new McCommands(platform, config, bot, console);
     }
 
     @On({EventType.GROUP_MESSAGE_CREATE, EventType.GROUP_AT_MESSAGE_CREATE,
             EventType.MESSAGE_CREATE, EventType.AT_MESSAGE_CREATE, EventType.C2C_MESSAGE_CREATE})
     public void onGroupMessage(QQMessageEvent message) {
-        // 命令先过一遍：它可能在私聊里，那时根本没有"目标"可查。
+        // 去重排在最前：平台重推一次，聊天栏就多一行是小事，命令**就多跑一遍**是大事。
+        if (!firstSeen("m:" + message.eventId())) {
+            Log.debug("消息 " + message.eventId() + " 是平台重推的，忽略");
+            return;
+        }
+        // 私聊先定身份：它没有"目标"可查，但**未绑定的群也没有** —— 两者只能靠 scene 区分。
+        // 未绑定会话（包括敲了命令前缀的）一律走 noteUnbound：记档一次 + 给运维指路。
+        boolean privateChat = QqEvents.isPrivateChat(message);
+        Optional<BridgeConfig.Target> bound = target(message);
+        if (!privateChat && bound.isEmpty()) {
+            noteUnbound(message);
+            return;
+        }
         if (commands.handle(message)) {
             return;
         }
-        Optional<BridgeConfig.Target> bound = target(message);
-        if (bound.isEmpty()) {
-            noteUnbound(message);
+        if (privateChat) {
+            // 私聊只为命令服务：没命中前缀的消息没人问过服务器，故意不桥接。
+            Log.debug("私聊里的普通消息，不桥接");
             return;
         }
         BridgeConfig.Target target = bound.get();
@@ -73,13 +85,13 @@ public final class QqToMc {
         CommandAccess.Sender sender = QqEvents.of(message);
         Log.debug("收到 " + target.label() + " 的消息：openid=" + sender.openid()
                 + " member_role='" + sender.memberRole() + "' roles=" + sender.roleIds()
-                + " 内容：" + message.content());
+                + " 内容：" + sanitize(message.content()));
         // mentions 里每个 User 的字段全打出来 —— "at 的是不是当前 bot"要靠它跟 <@...> 里的 id 对上，
         // 而那个 id 跟 selfId() 不是一个体系（真机实测），所以得先看清它的形状。
         for (io.github.skiesworld.qqbot.model.User mentioned : message.mentions()) {
             Log.debug("  mentions 一项：id=" + mentioned.id + " user_openid=" + mentioned.userOpenid
                     + " member_openid=" + mentioned.memberOpenid + " union_openid=" + mentioned.unionOpenid
-                    + " bot=" + mentioned.bot + " username=" + mentioned.username);
+                    + " bot=" + mentioned.bot + " username=" + sanitize(mentioned.username));
         }
         Log.debug("  mentionedBot()=" + message.mentionedBot());
         // 被动回复要的是消息自己的 id（messageId()），信封的 id（eventId()）是另一回事 —— 真机上验过两者不同。
@@ -90,22 +102,18 @@ public final class QqToMc {
             Log.debug("群 " + target.label() + " 配成了只出不进，忽略这条消息");
             return;
         }
-        // content() 里 @ 标记已经由 SDK 剥掉了（<@openid> 在 MC 里没有意义）。
-        String content = message.content();
-        if (content == null || content.isBlank()) {
+        // content() 里 @ 标记已经由 SDK 剥掉了（<@openid> 在 MC 里没有意义）；剩下的部分是陌生人文本，净化再用。
+        String content = sanitize(message.content());
+        if (content.isEmpty()) {
             Log.debug("群 " + target.label() + " 的消息没有文字内容，忽略");
             return;
         }
-        if (!firstSeen("m:" + message.eventId())) {
-            Log.debug("群 " + target.label() + " 的消息 " + message.eventId() + " 是平台重推的，忽略");
-            return;
-        }
         String who = message.author() == null || message.author().username == null
-                ? shortId(message.senderId()) : message.author().username;
+                ? shortId(message.senderId()) : sanitize(message.author().username);
         Map<String, String> values = new LinkedHashMap<>();
         values.put("group", target.label());
         values.put("user", who);
-        values.put("text", content.strip());
+        values.put("text", content);
         broadcast(target, Templates.QQ_CHAT, values);
 
         int attachments = message.segments().media().size();
@@ -192,6 +200,21 @@ public final class QqToMc {
             // bridge's dispatcher down with it.
             Log.error("把 QQ 消息送进聊天栏失败", e);
         }
+    }
+
+    /**
+     * 陌生人文本进服务器前的净化：剥掉 § 格式码 —— 否则借颜色码就能伪造别的玩家的发言、给聊天栏调色；
+     * 控制字符（含换行）折成空格 —— 一条 QQ 消息不该能在日志或聊天栏里凭空多出几行。
+     *
+     * <p>只动"从 QQ 来"的文本；模板作者自己写的 § 是功能，不经过这里。{@code §.} 的剥法与
+     * MC→QQ 出方向一致（见 {@code BridgeRuntime.plain}），少一处行为差异。
+     */
+    static String sanitize(String text) {
+        if (text == null) {
+            return "";
+        }
+        return text.replaceAll("§.", "").replace("§", "")
+                .replaceAll("[\\p{Cntrl}]+", " ").trim();
     }
 
     private static String shortId(String openid) {

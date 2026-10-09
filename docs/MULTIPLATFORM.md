@@ -162,3 +162,38 @@ Gradle 8.8 + JDK 21 daemon + ForgeGradle 6 那一整套）。
   一次 `clean build` 从约 40 秒变成 8～12 分钟。别随手 clean。
 * 各平台的 Java 版本不同，1.20.1 的服务端要 **JDK 17**；本机没有的话，
   Gradle toolchain 拉的那个在 `<GRADLE_USER_HOME>/jdks/` 下可以直接用。
+
+## 十、线程
+
+QQ 的事件跑在 mod 自己的虚拟线程上（`EventBus(Executor)` 注进去），进 MC 聊天栏时
+`server.execute(...)` hop 回主线程；MC 的事件在 tick 里只做一次投递。
+所以：**QQ 慢不卡服务器，服务器繁忙也不排队卡 QQ**。
+
+出站（MC → QQ）走平台的主动消息，会被频控或送去审核：失败/进审核只记日志，
+**不在 tick 里等待，也不让聊天因为 QQ 而失败**。
+
+## 十一、离线证到了什么，什么还得靠真机
+
+`./gradlew build` 会跑 `core` 的 103 个用例，**全部离线**：
+
+* 配置解析（含首次写出模板、未知占位符被跳过而不是硬连）
+* 出站请求的线上形状（MockWebServer 假平台：`POST /v2/groups/{openid}/messages`、
+  `Authorization: QQBot <token>`、`msg_type: 0`）
+* 平台拒绝 / 进审核时 `send` 只记日志、不重试、不抛给 tick
+* RCON 客户端：地址解析，以及**对着一个真的 socket 测协议**（测试里自己按协议应答）
+* 命令那条流程端到端（真事件 payload + 假 RCON 服务端 + 假平台）
+
+relocate 后的 jar 也单独点过一次：从 jar 里造 client、解析一条群消息 payload，字段照旧。
+
+**真机上验过的**：五个平台的加载与命令；Paper 1.20.1 与 26.2 用同一个 jar（md5 一致）；
+Folia 26.1.2 的加载与命令树；QQ 侧的凭证、网关连接、两个方向的往返、
+被动回复与主动兜底、`@` 标记的剥离。
+
+**还没验的**：Folia 上的广播本身（要真人玩家 + 一条入站消息）。
+
+## 十二、开发用的测试服（可以删）
+
+`paper/paper-1.20.1/run`、`paper/paper-1.20.1/run-1.20.1`、`fabric/fabric-26.1/run`、
+`neoforge/neoforge-26.1/run`、`forge/forge-1.20.1/run` 是验证用的服务端目录，
+都在 `.gitignore` 里、不进仓库。它们是**验证环境**：留着，下次改完直接起服复验，
+不用重新下载（Mojang 那边现在限速）。要腾空间可以直接删整个目录 —— 代价是下次要重新拉。

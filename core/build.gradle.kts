@@ -25,6 +25,9 @@ dependencies {
     // Compile-only: each platform bundles and relocates these into its own jar, so core must not carry them.
     compileOnly("io.github.skiesworld:qqbot-java-sdk:${property("qqbot_sdk_version")}")
     compileOnly("org.yaml:snakeyaml:${property("snakeyaml_version")}")
+    // Core parses QQ event payloads with gson (QqEvents, QqToMc). Named explicitly rather than leaning on
+    // the SDK's transitive copy: shadow relocates it with the SDK, and Minecraft ships its own at runtime.
+    compileOnly("com.google.code.gson:gson:${property("gson_version")}")
     // Only so the shared slf4j sink can exist; every platform provides slf4j at runtime (or ignores it).
     compileOnly("org.slf4j:slf4j-api:${property("slf4j_version")}")
 

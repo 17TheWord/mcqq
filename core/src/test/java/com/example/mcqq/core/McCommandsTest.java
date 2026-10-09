@@ -115,7 +115,8 @@ class McCommandsTest {
     }
 
     private McCommands commands(BridgeConfig config) {
-        return new McCommands(headless(), config, config.bots().get(0));
+        // 就地执行的 ConsoleRunner：命令变成同步的，回显断言照旧写得动。
+        return new McCommands(headless(), config, config.bots().get(0), new ConsoleRunner(Runnable::run));
     }
 
     private QQMessageEvent groupMessage(String openid, String memberRole, String content) {
@@ -182,6 +183,22 @@ class McCommandsTest {
             replies.clear();
             assertTrue(commands.handle(directMessage("STRANGER", "/mcc list")));
             assertEquals(List.of(), replies, "陌生人试命令时不该从这里确认机器人在");
+        }
+    }
+
+    @Test
+    void aWhitelistedDirectUserCannotRunInAnUnboundGroup() throws Exception {
+        // 私聊白名单只在 C2C 生效：曾经"配置里查不到"被当成私聊，等于白名单在机器人加入的**任何**群
+        // 都能敲命令。未绑定的会话要原样交回 QqToMc，走"没绑定"的记档与 /qq bind 指路。
+        try (FakeRcon rcon = new FakeRcon("hunter2", OUTPUT)) {
+            McCommands commands = commands(config(rcon));
+
+            QQMessageEvent unboundGroup = event(EventType.GROUP_MESSAGE_CREATE, """
+                    {"group_openid":"G9","content":"/mcc list","author":
+                      {"member_openid":"OWNER","member_role":"member","username":"某人"}}""");
+            assertFalse(commands.handle(unboundGroup), "未绑定的群不该消费这条消息");
+            assertEquals(List.of(), replies);
+            assertEquals("", rcon.lastCommand(), "更不该把命令发进服务器");
         }
     }
 

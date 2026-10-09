@@ -58,7 +58,8 @@ class ForwardPlanTest {
     private BridgeRuntime runtime(String yaml) throws IOException {
         Path file = dir.resolve("config.yml");
         Files.writeString(file, yaml, StandardCharsets.UTF_8);
-        return BridgeRuntime.start(BridgeConfig.parse(file), headless(), new UnboundGroups());
+        return BridgeRuntime.start(BridgeConfig.parse(file), headless(), new UnboundGroups(),
+                new ConsoleRunner(Runnable::run));
     }
 
     @Test

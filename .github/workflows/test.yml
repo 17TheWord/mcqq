@@ -8,10 +8,11 @@ name: Test
 #   platforms: forge + versions: 1.20.1   → 就那一个窗口
 #   两个都 all                             → 全部，与 push 时一样
 # 产物照常传成 artifact，所以"我想要一个 forge-1.20.1 的 jar"就是这么拿。
+# 只在 **PR** 上跑。合并进 main 之后由 release.yml 构建（它本来就要构建一次），
+# 所以这里不用再挂 push: main —— 否则每次合并都白跑两遍。
+# 于是：推 dev 不触发任何东西（省 action），验证发生在 dev → main 的 PR 上，
+# 合并才进发布流程。
 on:
-  push:
-    branches:
-      - main
   pull_request:
     types: [ opened, synchronize ]
   workflow_dispatch:
