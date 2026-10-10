@@ -2,72 +2,57 @@
 
 ## 一句话
 
-**改 `gradle.properties` 的 `mod_version`，合进 `main`，就发一次。**
-版本号没变就不会发 —— 所以"发版"是一个明确的动作，不是每次合并的副作用。
+**推一个 tag 就发一次。tag 本身就是发布版本。**
+
+```bash
+git tag v0.0.2        && git push origin v0.0.2         # 正式版
+git tag v0.0.2-beta   && git push origin v0.0.2-beta    # 预发布（--prerelease，Modrinth 的 version-type 也是 beta）
+```
+
+版本号以 **tag** 为准：`v` 后面那串就是版本，经 `-Pmod_version` 一路进产物名**与描述符**
+（`fabric.mod.json` / `mods.toml` / `plugin.yml`）。根 `gradle.properties` 的 `mod_version` 只是
+**本地开发默认值**，发布时被 tag 覆盖。
 
 ```
-推 dev        → 什么都不跑
-PR (dev→main) → test.yml 跑矩阵（每个平台一格，并行）
-合并进 main   → release.yml：读版本 → 闸门 → 构建 → 建 release → 上架
+推 tag v0.0.2  → release.yml：解 tag → 闸门 → 构建 → 建 release → 上架
+开 PR          → test.yml 跑矩阵（每个平台一格，并行）
+合并进 main    → 什么都不跑（发版是"推 tag"这个动作，不是合并的副作用）
 ```
+
+## ⚠️ 两个容易踩的点
+
+**① tag 必须由人推（或非 `GITHUB_TOKEN` 的凭证推）。**
+用内置 `GITHUB_TOKEN` 推的 tag **不会触发其他工作流**（GitHub 防递归的规则），所以
+"一个工作流打 tag、另一个挂 `on: push: tags`"那种写法，后者**永远不会跑**，而且看起来完全正常。
+这也正是本工作流**不再挂 `push: main`** 的原因。
+
+**② 闸门查的是 Release，不是 tag。**
+这次运行本来就是 tag 触发的，tag 必然存在 —— 拿它当闸门等于没闸门。所以查的是
+**这个 tag 有没有 Release**：有就整段跳过，挡住"跑了两次、第二次重复上架"。
+要重发就先删掉那个 Release 与 tag，再重新推 tag。
 
 ## release.yml 的形状
 
 | job | 干什么 |
 | --- | --- |
-| `platforms` | 复用 `platforms.yml`：从 `gradle.properties` 读出版本事实，并生成平台矩阵 |
-| `gate` | **版本号变了才发**：`v<版本>` 的标签已存在 → 整个工作流跳过 |
-| `build` | 一次 `./gradlew clean build -PwithForge=true` 出全部产物 → 存 artifact → `gh release create v<版本> --generate-notes`（**只放变更日志，不带 jar**） |
+| `platforms` | 复用 `platforms.yml`：跑 `.github/scripts/platform-matrix.sh` **扫目录**推导矩阵（顺带读出 `mod_version`） |
+| `gate` | 解出 tag → `版本 = tag 去掉开头的 v` → 已有 Release 就整段跳过 |
+| `build` | 在 **tag 那个提交**上 `./gradlew clean build -Pmod_version=<tag 版本>` → 存 artifact → `gh release create <tag> --generate-notes --verify-tag`（**只放变更日志，不带 jar**） |
 | `publish` | 按矩阵每格跑一次 `mc-publish`（Modrinth / CurseForge）。没配项目 id 就整段跳过 |
 
-## ⚠️ 两个容易踩的点
+## 手动重跑
 
-**① 触发条件必须是 `push: main`，不能是 tag。**
-用内置 `GITHUB_TOKEN` 推的 tag **不会触发其他工作流**（GitHub 防递归的规则）。
-所以"一个工作流打标签、另一个挂 `on: push: tags`"那种写法，后者**永远不会跑**，
-而且看起来完全正常。标签由 `gh release create` 在当前 HEAD 上顺手打。
-
-**② 闸门查的是标签，不是 release。**
-标签才是"这个版本发过没有"的唯一依据，也顺带挡住"只打了标签、没建 release"那种半成品状态。
-
-## 在分支上发测试版
-
-**在 Actions → Release → Run workflow 里选任何分支**即可 —— 跑的是那个分支上的工作流文件。
-
-1. `gradle.properties` 里**照常写正式版本号**（`0.0.1` / `0.0.2`）—— 不用手写 `-beta`
-2. Actions → Release → Run workflow → 选那个分支
-
-**后缀是工作流自己加的**：非 main 分支上，实际发布版本是 `<版本>-beta`，例如 `0.0.1-beta`。
-（版本号**已经**带后缀时不再追加。）
-
-* 构建时用 `-Pmod_version=<实际版本>` 覆盖 —— 它一路进产物名**与描述符**
-  （`fabric.mod.json` / `mods.toml` / `plugin.yml` 里都是它）
-* **beta 同样上架 Modrinth / CurseForge** —— 测试版就是发过去给人测的，
-  带后缀时 mc-publish 的 version-type 自动是 `beta`
-* `v0.0.1-beta` 与 `v0.0.1` 是两个不同的标签，正式版不会被它挡住
-
-⚠️ **同一个分支发第二次**：`v0.0.1-beta` 的标签已经存在 → 闸门会跳过（`release=false`）。
-要再发一次，先删掉那个标签，或者把 `mod_version` 改成 `0.0.2`。
-
-⚠️ **分支上不用改 `mod_version`**（后缀是工作流加的），所以合并进 main 之后也不会残留 `-beta` ✓。
-
-## 要重发同一个版本
-
-闸门会挡住（标签还在）。做法是**先删掉那个标签**，再手动跑一次 `release.yml`（`workflow_dispatch`）：
-
-```bash
-git push --delete origin v0.0.1     # 删标签（release 也要在 GitHub 上删掉）
-```
-
-**不做"先删再建"的自动重发** —— 那会变成"每次合并都重发一次"，
-而且往 Maven Central 发时同一个版本根本发不上去。
+`workflow_dispatch` 要填一个**已存在**的 tag —— 用于"上次跑到一半失败、想接着跑"。
+（push 事件本来就带 tag，所以那条入口只给重跑用。）
 
 ## 上架到 Modrinth / CurseForge
 
 先在两个平台上把项目建好，再在仓库 Settings → Secrets and variables → Actions 里配：
 
-* Variables：`MODRINTH_ID` / `CURSEFORGE_ID`
-* Secrets：`MODRINTH_TOKEN` / `CURSEFORGE_TOKEN`
+* **Variables**：`MODRINTH_ID` / `CURSEFORGE_ID`
+* **Secrets**：`MODRINTH_TOKEN` / `CURSEFORGE_TOKEN`
+
+⚠️ 是 **Variables** 里的 `MODRINTH_ID`（发布 job 的条件是 `vars.MODRINTH_ID != ''`），只有 token 不够。
 
 **没配也不会失败** —— `publish` 整个 job 跳过，构建、Actions artifacts 与 GitHub Release 照常。
 想先手动传，就从那次 Actions 运行的 artifacts 里下载对应的 jar。
@@ -76,11 +61,10 @@ git push --delete origin v0.0.1     # 删标签（release 也要在 GitHub 上�
 下载量也算数；GitHub 再挂一份只会分流）。
 ⚠️ Actions artifacts **默认 90 天过期**，所以长期归档只有平台上那两份。
 
-`game-versions` 是**每个窗口一份**（`publish_game_versions_26_1` / `_1_20_1`）。
-⚠️ spigot / paper 两份是例外：它们**一个 jar 覆盖 1.20.1 → 26.x**，
-所以 `game-versions` 是**并集**（`[1.20.1, 1.20.2, 26.1, 26.2]`）——
-只写 26.x 的话，1.20.1 的用户在 Modrinth 上搜不到。
-⚠️ 两份列表合成**一个**数组：直接拼会得到 `[..],[..]`，mc-publish 不认。
+`game-versions` 是**每个窗口一份**，写在各自 `平台/窗口/gradle.properties` 的 `publish_game_versions` 里
+（矩阵脚本读出来传给 mc-publish）。
+⚠️ spigot / paper 两份是例外：它们**一个 jar 覆盖 1.20.1 → 26.x**，所以写的是**并集**
+`[1.20.1, 1.20.2, 26.1, 26.2]` —— 只写 26.x 的话，1.20.1 的用户在 Modrinth 上搜不到。
 
 ## CI 跑在哪个镜像
 
@@ -89,8 +73,13 @@ git push --delete origin v0.0.1     # 删标签（release 也要在 GitHub 上�
 
 ## 加一个平台 / 窗口要动哪几处
 
-1. `settings.gradle.kts` 的 `include`
-2. `.github/actions/platform-matrix/action.yml` 的矩阵（**一行**：名字、子项目、jar 路径、loaders、game-versions、额外参数）
-3. `release.yml` 的两处产物路径：`upload-artifact` 的 `path:` 与 `gh release create` 的 `JARS`
+**加一个窗口**：建一个 `平台/窗口/` 目录（含构建脚本 + `gradle.properties`，里面写
+`publish_game_versions`），再在 `settings.gradle.kts` 里 `include` 一行。
+**矩阵与产物路径都是扫目录推导的，CI 一个字都不用改。**
 
-第 3 处最容易漏，而且没人测它 —— 漏了会"构建成功、release 里少一个 jar"。
+**加一个平台**：同上，另外 `.github/scripts/platform-matrix.sh` 里有一条 loader 命名规则
+（默认就是平台名；Paper 那种要额外声明 Folia 的才需要写）。
+
+> 以前要改四处：`settings.gradle.kts`、根 `gradle.properties`、`action.yml` 里手写的矩阵、
+> `release.yml` 里两处硬编码产物路径。最后那处最容易漏、而且没人测它 —— 漏了就是
+> "构建成功、release 里少一个 jar"。现在这些都不存在了。

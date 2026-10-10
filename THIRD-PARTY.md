@@ -13,25 +13,38 @@
   光列一份组件清单不够。
 * **§4.4 NOTICE 是条件性的**（"**If** the Work includes a NOTICE text file"）——
   上面这些库的 jar 里**都没有 NOTICE 文件**（查过），所以这一条不适用。
-* **§4.2 改过的文件要注明改过** —— 我们把它们的类 relocate 到 `com.example.mcqq.shaded.*` 了，
+* **§4.2 改过的文件要注明改过** —— 我们把它们的类 relocate 到 `io.github.theword.mcqq.shaded.*` 了，
   那就是修改，这份文件里写明了。
 * §4.3 是"分发 **源码** 时保留版权声明"，我们只分发编译产物，不适用。
 
 三份文件（`LICENSE`、这份、`LICENSES/Apache-2.0.txt`）都会被打进 jar，
 见根目录 `build.gradle.kts` 里给 shadowJar 加的那三行。
 
-## 打进 jar 的（会 relocate 到 `com.example.mcqq.shaded.*`）
+## 打进 jar 的（会 relocate 到 `io.github.theword.mcqq.shaded.*`）
 
 | 组件 | 版本 | 许可证 | 说明 |
 | --- | --- | --- | --- |
-| [qqbot-java-sdk](https://github.com/skiesworld/qqbot-java-sdk) | 0.0.4 | Apache-2.0 | QQ 官方机器人 API v2 的 Java SDK，本项目的一半 |
+| [qqbot-java-sdk](https://github.com/skiesworld/qqbot-java-sdk) | 0.0.7 | Apache-2.0 | QQ 官方机器人 API v2 的 Java SDK，本项目的一半 |
 | [OkHttp](https://square.github.io/okhttp/) | 4.12.0 | Apache-2.0 | SDK 的 HTTP 客户端 |
 | [Okio](https://square.github.io/okio/) | 3.6.0 | Apache-2.0 | OkHttp 的 I/O 层（随 OkHttp 带入） |
 | [Kotlin stdlib](https://kotlinlang.org/) | 1.9.10 | Apache-2.0 | OkHttp 4.x 是 Kotlin 写的（随 OkHttp 带入；stdlib-jdk7/jdk8/common 同版本） |
 | [Gson](https://github.com/google/gson) | 2.11.0 | Apache-2.0 | SDK 的 JSON |
 | [SnakeYAML](https://bitbucket.org/snakeyaml/snakeyaml) | 2.5 | Apache-2.0 | 读配置文件 |
-| [error_prone_annotations](https://github.com/google/error-prone) | 2.27.0 | Apache-2.0 | Gson 的注解依赖 |
-| [JetBrains annotations](https://github.com/JetBrains/java-annotations) | 13.0 | Apache-2.0 | 注解 |
+
+## 传递依赖里被**排除**的（不在产物里）
+
+这两个是 Gson / Kotlin 带进来的**纯注解**库，运行时毫无用处，所以根 `build.gradle.kts` 的
+`bundled` 配置**显式排除了它们**。
+
+⚠️ 不排除的后果不是"多几 KB"：relocate 规则是**按包名**匹配的（`com.google.gson`、`kotlin`），
+而这两个库的包名不同 —— 它们会**原样进 jar**，让 Forge 1.20.1 直接拒绝启动：
+`java.lang.module.ResolutionException: Modules ... export package ... to module minecraft`
+（它的模块系统不允许同一个包出现在两个模块里。26.x 的加载器不检查这个，所以只有那一代炸。）
+
+| 组件 | 版本 | 许可证 | 谁带进来的 |
+| --- | --- | --- | --- |
+| [error_prone_annotations](https://github.com/google/error-prone) | 2.27.0 | Apache-2.0 | Gson |
+| [JetBrains annotations](https://github.com/JetBrains/java-annotations) | 13.0 | Apache-2.0 | Kotlin stdlib |
 
 ## 不打包、由服务端提供的
 

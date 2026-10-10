@@ -8,7 +8,7 @@
   "license": "${mod_license}",
   "environment": "*",
   "entrypoints": {
-    "main": ["com.example.mcqq.fabric.McQqMod"]
+    "main": ["${java_package}.fabric.McQqMod"]
   },
   "depends": {
     "fabricloader": ">=0.19.5",
