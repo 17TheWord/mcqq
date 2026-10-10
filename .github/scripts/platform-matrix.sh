@@ -86,6 +86,8 @@ loaders_for() {
 
 rows=()
 jars=()
+# 已发出的「平台|窗口全名」对，用来回报"哪些筛选 token 一个都没匹配上"（拼错了要说一声）。
+matched=()
 
 # 扫两级：平台目录 → 窗口目录。一个窗口 = 一个**含构建脚本**的目录，
 # 所以 run/ build/ 之类没有构建脚本的目录天然被跳过。
@@ -101,6 +103,7 @@ for platform_dir in */; do
     name="${window_dir%/}"
     name="${name##*/}"
     want "$name" || continue
+    matched+=("$platform|$name")
 
     props_file="${window_dir}gradle.properties"
     game_versions=$(read_prop publish_game_versions "$props_file")
@@ -120,7 +123,30 @@ for platform_dir in */; do
   done
 done
 
-# 筛出空集要当场报错：拼错一个平台名却"构建成功但什么都没出"，比直接失败难查得多。
+# 筛选条件里"一个窗口都没匹配上"的 token —— **只警告，不阻断**：
+# 拼错一个不该把其余匹配项也一起作废（"只找可找到的，找不到的就算了"）。
+report_unmatched() {
+  local kind=$1 tokens=$2 t pair p n hit
+  [ -n "$tokens" ] || return 0
+  for t in ${tokens//,/ }; do
+    hit=0
+    for pair in "${matched[@]}"; do
+      p="${pair%%|*}"
+      n="${pair#*|}"
+      if [ "$t" = "$p" ] || [ "$t" = "$n" ]; then hit=1; fi
+      if [ "$kind" = "versions" ] && [ "$t" = "${n#*-}" ]; then hit=1; fi
+      if [ "$hit" = 1 ]; then break; fi
+    done
+    if [ "$hit" = 0 ]; then
+      echo "::warning::${kind} 里的 '$t' 没匹配到任何窗口，已忽略"
+    fi
+  done
+}
+report_unmatched platforms "$WANT_PLATFORMS"
+report_unmatched versions  "$WANT_VERSIONS"
+
+# 一个都没匹配上就当场报错：那时矩阵为空 → 整个 job 被**静默跳过**，
+# "跑成功了但什么都没发"比直接失败难查得多。
 if [ ${#rows[@]} -eq 0 ]; then
   echo "::error::没有匹配的窗口 —— platforms='${WANT_PLATFORMS:-<全部>}' versions='${WANT_VERSIONS:-<全部>}'" >&2
   exit 1

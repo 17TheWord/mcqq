@@ -36,13 +36,28 @@ on:
   push:
     tags:
       - 'v*'
-  # 手动重试：填一个**已存在**的 tag。push 事件本来就带 tag，这条是给"重跑"用的。
+  # 手动入口：给"重跑 / 补发"用。push 事件本来就带 tag，这条只是另一条路。
   workflow_dispatch:
     inputs:
       tag:
         description: 要发布的 tag（例如 v0.0.2）。必须已经存在。
         required: true
         type: string
+      # ⚠️ 不是下拉：GitHub 的 `choice` **只能单选**，而"补发两个平台"是常见需求。
+      # 逗号分隔即可（`paper,spigot`）—— 拼错的 token 脚本只会 ::warning:: 并忽略，不会阻断。
+      platforms:
+        description: 平台，逗号分隔（fabric / neoforge / forge / paper / spigot）；留空或 all = 全部
+        required: false
+        type: string
+      versions:
+        description: 只发哪些 MC 窗口，逗号分隔（如 1.20.1，或 26.1,1.20.1）；留空或 all = 全部
+        required: false
+        type: string
+      republish:
+        description: 重发模式 —— 这个 tag 已经有 Release 也继续（补发个别窗口时勾上）
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -58,6 +73,10 @@ jobs:
   # 平台矩阵（唯一出处）。version 输出在这里没用了 —— 发布版本现在来自 tag；它仍给 test.yml 用。
   platforms:
     uses: ./.github/workflows/platforms.yml
+    with:
+      # 手动入口可以只发一部分窗口（补发用）；push: tags 时这两个输入是空串 = 全部。
+      platforms: ${{ inputs.platforms }}
+      versions: ${{ inputs.versions }}
 
   # 该不该发。**同一个 tag 已经有 Release 就整段跳过** —— 查 Release 而不是查 tag：
   # 这次运行本来就是 tag 触发的，tag 必然存在，拿它当闸门等于没闸门。
@@ -78,6 +97,8 @@ jobs:
           PUSHED_TAG: ${{ github.ref_name }}
           # 手动入口（workflow_dispatch）输入的 tag。push 事件下它是空串。
           INPUT_TAG: ${{ github.event.inputs.tag }}
+          # 重发模式：勾上就跳过"已有 Release 就停"，用于补发个别窗口。
+          REPUBLISH: ${{ github.event.inputs.republish }}
         run: |
           # 手动入口优先：那时 github.ref_name 是分支，真正要发的是输入的那个 tag。
           TAG="${INPUT_TAG:-$PUSHED_TAG}"
@@ -100,9 +121,12 @@ jobs:
           echo "prerelease=$PRE"        >> $GITHUB_OUTPUT
           echo "tag=$TAG  version=$VERSION  prerelease=$PRE"
 
-          if gh release view "$TAG" >/dev/null 2>&1; then
+          if [ "$REPUBLISH" = "true" ]; then
+            echo "release=true" >> $GITHUB_OUTPUT
+            echo "::notice::重发模式（republish=true）—— 跳过「已有 Release 就停」的检查"
+          elif gh release view "$TAG" >/dev/null 2>&1; then
             echo "release=false" >> $GITHUB_OUTPUT
-            echo "::notice::$TAG 已经有 Release 了，跳过。要重发就先删掉那个 Release 与 tag。"
+            echo "::notice::$TAG 已经有 Release 了，跳过。补发个别窗口就勾 republish；整版重发要先删掉那个 Release 与 tag。"
           else
             echo "release=true" >> $GITHUB_OUTPUT
             echo "$TAG 还没有 Release，继续发布。"
@@ -152,7 +176,10 @@ jobs:
         shell: bash
         run: |
           TAG="${{ needs.gate.outputs.tag }}"
-          if [ "${{ needs.gate.outputs.prerelease }}" = "true" ]; then
+          # 重发时 Release 已经存在 —— 不重建（`--generate-notes` 会把原有的变更日志冲掉）。
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG 已存在，跳过创建（重发模式）"
+          elif [ "${{ needs.gate.outputs.prerelease }}" = "true" ]; then
             gh release create "$TAG" --generate-notes --prerelease --verify-tag
           else
             gh release create "$TAG" --generate-notes --verify-tag
