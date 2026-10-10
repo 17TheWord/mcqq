@@ -40,10 +40,29 @@ git tag v0.0.2-beta   && git push origin v0.0.2-beta    # 预发布（--prerelea
 | `build` | 在 **tag 那个提交**上 `./gradlew clean build -Pmod_version=<tag 版本>` → 存 artifact → `gh release create <tag> --generate-notes --verify-tag`（**只放变更日志，不带 jar**） |
 | `publish` | 按矩阵每格跑一次 `mc-publish`（Modrinth / CurseForge）。没配项目 id 就整段跳过 |
 
-## 手动重跑
+## 手动重跑 / 补发
 
-`workflow_dispatch` 要填一个**已存在**的 tag —— 用于"上次跑到一半失败、想接着跑"。
-（push 事件本来就带 tag，所以那条入口只给重跑用。）
+`workflow_dispatch` 的输入：
+
+| 输入 | 说明 |
+| --- | --- |
+| `tag` | **必填**，一个已存在的 tag（例如 `v0.0.2`） |
+| `platforms` | 平台，逗号分隔（`paper,spigot`）；留空或 `all` = 全部 |
+| `versions` | MC 窗口，逗号分隔（`1.20.1`）；留空或 `all` = 全部 |
+| `republish` | **重发模式** —— 这个 tag 已经有 Release 也继续。补发个别窗口时勾上 |
+
+两种用法：
+
+* **整版重跑**：填 tag，其余留空，**不勾** `republish`。那个 tag 已有 Release 时会被闸门挡住（这是对的）。
+* **补发个别窗口**（比如某平台在 Modrinth 上挂了）：填 tag + `platforms=paper,spigot` + **勾 `republish`**。
+  矩阵只含选中的窗口 → 只上传/上架它们，**不碰**已经发成功的那些。
+
+⚠️ **先合进 main 再手动跑。** `push: tags` 跑的是 **tag 提交上的** workflow 文件；而 `workflow_dispatch`
+跑的是**所选分支**（默认 main）上的文件。所以修完 workflow 要先合并，手动入口才会用上新逻辑 ——
+而 `build` 仍会 `checkout ref=<tag>`，用**发布时的源码**构建。
+
+> 拼错的 `platforms` / `versions` 只会打一条 `::warning::` 并忽略那个 token，不会阻断其余匹配项；
+> 只有**一个都没匹配上**才报错（那时矩阵为空、job 会被静默跳过，比失败难查）。
 
 ## 上架到 Modrinth / CurseForge
 
