@@ -72,7 +72,7 @@ obfuscation {
  * 或看字节码，也可以丢进一个真正的正式服。两条路分开验，别混成一个。
  *
  * 用法：`./gradlew :forge:forge-1.20.1:installDevJar`，然后
- * `./gradlew :forge:forge-1.20.1:runServer -PwithForge=true -PjarOnly`
+ * `./gradlew :forge:forge-1.20.1:runServer -PjarOnly`
  */
 tasks.register('installDevJar', Copy) {
     dependsOn tasks.named('shadowJar')

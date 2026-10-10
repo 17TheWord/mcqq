@@ -277,16 +277,10 @@ Related documentation:
 * [Release process](docs/RELEASING.md): project release and CI process
 * [Third-party components](THIRD-PARTY.md): bundled components and their licences
 
-Build the core and the common platforms:
+Build every platform (core + fabric / neoforge / forge ×2 / paper / spigot):
 
 ```bash
 ./gradlew build
-```
-
-To also build Forge:
-
-```bash
-./gradlew build -PwithForge=true
 ```
 
 ## Usage notice

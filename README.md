@@ -277,16 +277,13 @@ templates:
 * [发布流程](docs/RELEASING.md)：项目发布与 CI 流程
 * [第三方组件](THIRD-PARTY.md)：打包组件及其许可证
 
-构建核心以及常用平台：
+构建需要 **JDK 25**（把 `JAVA_HOME` 指向它）。26.x 的 fabric-loom / moddev 是跑在 Gradle daemon 里的插件，
+所以是 daemon 的 JVM 要 25 —— toolchain 代替不了。
+
+构建全部平台（core + fabric / neoforge / forge ×2 / paper / spigot）：
 
 ```bash
 ./gradlew build
-```
-
-需要同时构建 Forge：
-
-```bash
-./gradlew build -PwithForge=true
 ```
 
 ## 使用说明
