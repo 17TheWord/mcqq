@@ -2,6 +2,10 @@
 🌍 <a href="README_EN.md">English</a> / 中文
 </div>
 
+<p align="center">
+  <img src="./assets/logo.png" width="200" height="200" alt="mc-qq">
+</p>
+
 <div align="center">
 
 # MC ↔ QQ Bot
@@ -228,6 +232,10 @@ templates:
   mc-chat: "[MC] {player}: {text}"
   mc-join: "[MC] {player} 加入了世界"
   mc-death: "[MC] {player} 死亡（{killer}）"
+
+  # @ 标记怎么显示。它们是**片段**（插进 {text} 里），空串 = 删掉。
+  mention-user: "§a@{name}§r"     # @某人，绿字，后面正文恢复默认色
+  mention-emoji: "[表情]"
 ```
 
 可用占位符：
@@ -243,6 +251,8 @@ templates:
 | `{killer}`   | 凶手名称          |
 | `{platform}` | 来源平台          |
 | `{time}`     | 时间            |
+| `{name}`     | 被 @ 的人的名字（只在 `mention-*` 里） |
+| `{id}`       | 原始 id（只在 `mention-*` 里） |
 
 未识别的占位符会原样保留，便于发现配置错误。
 
@@ -277,16 +287,13 @@ templates:
 * [发布流程](docs/RELEASING.md)：项目发布与 CI 流程
 * [第三方组件](THIRD-PARTY.md)：打包组件及其许可证
 
-构建核心以及常用平台：
+构建需要 **JDK 25**（把 `JAVA_HOME` 指向它）。26.x 的 fabric-loom / moddev 是跑在 Gradle daemon 里的插件，
+所以是 daemon 的 JVM 要 25 —— toolchain 代替不了。
+
+构建全部平台（core + fabric / neoforge / forge ×2 / paper / spigot）：
 
 ```bash
 ./gradlew build
-```
-
-需要同时构建 Forge：
-
-```bash
-./gradlew build -PwithForge=true
 ```
 
 ## 使用说明

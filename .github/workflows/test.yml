@@ -1,7 +1,7 @@
 name: Test
 
 # 推 main 与每个 PR 都跑：**每个平台各一格**，并行，哪一格挂了就是哪个平台坏了。
-# 平台清单来自 .github/workflows/platforms.yml —— 加平台只改那一个文件。
+# 平台清单是扫目录推导的（.github/scripts/platform-matrix.sh）—— 加窗口 = 加一个目录。
 #
 # 也可以手动跑（Actions → Test → Run workflow），用两个下拉框挑"要构建哪几个"：
 #   platforms: forge + versions: all      → forge 的全部窗口
@@ -71,13 +71,16 @@ jobs:
           java-version: '25'
 
       # 每格都跑一遍 core 的测试：测试本身只有几十毫秒，换来的是"这一格的平台在 core 旁边也编译得过"。
-      # matrix.properties 只有 forge 那格非空（-PwithForge=true），见 platforms.yml 的说明。
+      # 矩阵来自 .github/scripts/platform-matrix.sh（扫目录推导），每行给一个 `:平台:窗口`。
       - name: Build ${{ matrix.name }} and run the tests
-        run: ./gradlew :core:test ${{ matrix.project }}:build ${{ matrix.properties }} --stacktrace
+        run: ./gradlew :core:test ${{ matrix.project }}:build --stacktrace
 
       - name: Keep the ${{ matrix.name }} jar
         uses: actions/upload-artifact@v7
         with:
           name: mc-qq-${{ needs.platforms.outputs.version }}-${{ matrix.name }}
-          path: ${{ matrix.jar }}
+          # matrix.jar 是通配（版本不写死）；同目录的薄 jar（-dev.jar）排除掉。
+          path: |
+            ${{ matrix.jar }}
+            !**/*-dev.jar
           if-no-files-found: error

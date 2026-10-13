@@ -11,7 +11,8 @@ base {
 }
 
 java {
-    // Minecraft 26.x requires Java 25; gradle/gradle-daemon-jvm.properties asks the daemon for it.
+    // Minecraft 26.x requires Java 25 — 用 JAVA_HOME 指定（loom 是跑在 Gradle daemon 里的插件，
+    // 所以是 daemon 的 JVM 要 25，toolchain 管不到它）。见 docs/MULTIPLATFORM.md 第一节。
     toolchain {
         languageVersion.set(JavaLanguageVersion.of(25))
     }
@@ -36,6 +37,9 @@ tasks.jar {
 // 描述符的公共字段只写在 gradle.properties 一处，这里把它们连同版本号一起喂给 expand。
 val resourceFacts = mapOf(
     "version" to version.toString(),
+    // 入口类所在的 Java 包，用来拼描述符里的 main（见 fabric.mod.json）。
+    // 改包名时这里**不用动**：只要改根 gradle.properties 的 maven_group（本项目的 Java 包与 Maven 坐标是同一个值）。
+    "java_package" to property("maven_group").toString(),
     "mod_id" to property("mod_id").toString(),
     "mod_name" to property("mod_name").toString(),
     "mod_authors" to property("mod_authors").toString(),

@@ -10,10 +10,12 @@ name: Platforms
 # 恰好丢掉要复用的那一半。
 #
 # test 与 release 都调它（`uses: ./.github/workflows/platforms.yml`）。于是：
-#   * 加平台 → 改 `.github/actions/platform-matrix/action.yml` 里的矩阵（另外还要改
-#     `settings.gradle.kts` 的 include，以及 `release.yml` 里两处产物路径 —— 那两处不在这里）
-#   * 改版本号或 MC 窗口 → **不在这里改**：那些事实的唯一出处是 gradle.properties
-#     （`mod_version`、`publish_game_versions_*`、`minecraft_version_range`），这里只读出来传给调用方。
+#   * 加一个窗口 → 建一个 `平台/窗口/` 目录（含构建脚本 + gradle.properties 里的
+#     publish_game_versions），再在 `settings.gradle.kts` 里 include 一行。
+#     **矩阵与产物路径都是扫目录推导的，CI 一个字都不用改。**
+#   * 加一个平台 → 同上，另外脚本里有一条 loader 命名规则（默认就是平台名）。
+#   * 改版本号或 MC 窗口 → 改根 `gradle.properties`（mod_version）或那个窗口的 `gradle.properties`
+#     （publish_game_versions 与各版本号）；这里只读出来传给调用方。
 #   * 只构建一部分 → 调它时传 `with: { platforms: forge, versions: 1.20.1 }`（两者是"与"的关系；
 #     留空 = 全部）。test.yml 的 workflow_dispatch 就是给这个用的。
 #
@@ -44,11 +46,14 @@ on:
         default: ""
     outputs:
       version:
-        description: gradle.properties 里的 mod_version
+        description: 根 gradle.properties 里的 mod_version
         value: ${{ jobs.platforms.outputs.version }}
       matrix:
         description: 平台矩阵，喂给 strategy.matrix（每行自带它那个窗口的 game-versions）
         value: ${{ jobs.platforms.outputs.matrix }}
+      jars:
+        description: 每个窗口的产物路径，一行一个（release.yml 上传用）
+        value: ${{ jobs.platforms.outputs.jars }}
 
 jobs:
   platforms:
@@ -56,6 +61,7 @@ jobs:
     outputs:
       version: ${{ steps.matrix.outputs.version }}
       matrix: ${{ steps.matrix.outputs.matrix }}
+      jars: ${{ steps.matrix.outputs.jars }}
 
     steps:
       - name: Checkout repository

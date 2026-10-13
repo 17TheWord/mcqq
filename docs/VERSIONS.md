@@ -44,7 +44,7 @@ Fabric 侧用 26.2 的依赖**源码一行没改就编译通过并加载**。26.
    forge_version=<26.3 的 Forge>
    ```
    顺带看 `minecraft_version_range`（描述符的范围）要不要跟着抬。
-2. `./gradlew clean build -PwithForge=true` —— **编译器会精确指出哪几个调用断了**。
+2. `./gradlew clean build` —— **编译器会精确指出哪几个调用断了**。
    （`-P` 会覆盖 `gradle.properties` 的同名属性，所以想先拿新版本试一遍可以直接在命令行给，
    不必改文件。）
 3. 按断点位置分派：

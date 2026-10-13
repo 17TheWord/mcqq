@@ -5,7 +5,7 @@
 ## 一、形状
 
 ```
-mc-qq/                        Gradle 9.7.1 + JDK 25 daemon
+mc-qq/                        Gradle 9.7.1 + JDK 25（JAVA_HOME）
   core/                       零 MC 依赖；release 17 —— 一份 core 同时服务 1.20.1 与 26.x
   bukkit-common/              Bukkit 一族的共享部分，编译对 spigot-api
   fabric/fabric-26.1/
@@ -19,9 +19,20 @@ mc-qq/                        Gradle 9.7.1 + JDK 25 daemon
 项目路径是 `平台:窗口`（目录同名）。**窗口名用窗口起点**：`fabric-26.1` 覆盖 `[26.1, 26.2]`，
 范围写在描述符里，不写在这里。
 
-`forge:*` 是**按需**加进来的：ForgeGradle 的 mavenizer 在**配置阶段**就要下载整套 Forge 工具链，
-而 Gradle 会配置所有 include 的项目 —— 它一旦在项目列表里，网速差的机器上**任何** `./gradlew`
-调用都会失败，连另外几个平台也编不了。所以默认不带 forge，要它加 `-PwithForge=true`（CI 就是这么调的）。
+`forge:*` 现在是**无条件** include 的。⚠️ 代价要知道：ForgeGradle 的 mavenizer 在**配置阶段**就要
+下载整套 Forge 工具链，而 Gradle 会配置**所有** include 的项目 —— 所以现在**任何** `./gradlew`
+（哪怕只是 `help`）都会走一遍它。首次会下载并反编译 MC（实测约 5 分钟），之后有缓存
+（`.gradle/mavenizer/` + `<GRADLE_USER_HOME>/caches/minecraftforge/`），每次配置只多几秒。
+（曾经用 `-PwithForge=true` 门控过它，为了网速差的机器不被拖累；若哪天想加回来，
+就是给那两行 `include("forge:*")` 套个 `if`。）
+
+**跑构建的 JDK 必须是 25，用 `JAVA_HOME` 指定。** fabric-loom / moddev 是 Gradle **插件**、跑在 daemon 里，
+所以是 **daemon 的 JVM** 要 ≥25 —— Gradle 的 toolchain 只管编译/测试任务，管不到 daemon。
+
+⚠️ 这里**刻意不用** Gradle 的 daemon JVM criteria（`gradle/gradle-daemon-jvm.properties`）：
+它能在缺 JDK 的机器上自动下载，代价是把每个开发者的默认 JVM 钉死、并在 C 盘/注册表留下痕迹。
+本项目的约定是 **`JAVA_HOME` 指向 JDK 25**（CI 由 `set-java` 装 25 并设好 JAVA_HOME，天然满足）。
+加新窗口时若发现某个平台要别的 JVM，**不要**往这里加回那个文件 —— 那说明它该是独立构建（见第六节）。
 
 core 唯一认识的 MC 形状就是这条接缝：
 

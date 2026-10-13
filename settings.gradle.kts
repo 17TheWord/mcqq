@@ -5,13 +5,18 @@ pluginManagement {
         mavenCentral()
     }
 }
-
 plugins {
-    // Lets Gradle fetch the JDK 25 toolchain Minecraft 26.1.2 needs, so nobody has to install it by hand.
     id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
 }
 
-rootProject.name = "mc-qq"
+// ⚠️ 这里**刻意不装**工具链解析器插件（`org.gradle.toolchains.foojay-resolver-convention`）：
+// 它会在找不到 JDK 时**自动下载**一个，代价是把 JDK 版本变成构建的隐式依赖、
+// 往 `<GRADLE_USER_HOME>/jdks/` 里堆几百 MB、还绕过了"我就用我装的那个 JDK"的意图。
+// 本项目的约定是 **JDK 由开发者自己提供**（`JAVA_HOME` 指向 JDK 25），构建只做探测、不做下载。
+// 机器上 JDK 装在非标准位置（如 `D:\SDK\...`）时，用 `org.gradle.java.installations.paths`
+// 告诉 Gradle 去哪找 —— 那是绝对路径，写在**机器本地**的 gradle.properties 里，别写进仓库。
+
+rootProject.name = "mcqq"
 
 // `core` holds everything that does not know Minecraft exists; each other project is one platform's
 // adapter. Adding a platform means adding a directory here, not touching `core`.
@@ -24,20 +29,5 @@ include("fabric:fabric-26.1")
 include("paper:paper-1.20.1")
 include("spigot:spigot-1.20.1")
 include("neoforge:neoforge-26.1")
-/**
- * Forge 是**按需**加进来的，默认不加。
- *
- * 原因：ForgeGradle 的 mavenizer 在**配置阶段**就要下载整套 Forge 工具链。Gradle 会配置所有 include 的项目，
- * 所以它一旦在项目列表里，网速差的机器上**任何** `./gradlew` 调用都会失败 —— 连另外三个平台也编不了。
- *
- * 默认（本地）：不带参数 → 只构建 core / fabric / neoforge / bukkit。
- * 需要 Forge 时：`./gradlew -PwithForge=true build`（CI 就是这么调的，runner 的网络没问题）。
- */
-val withForge = startParameter.projectProperties["withForge"].toBoolean()
-if (withForge) {
-    include("forge:forge-26.1")
-    // 1.20.1 那一代**不**需要独立的 legacy 构建：官方 MDK 走 ModDevGradle 的
-    // `net.neoforged.moddev.legacyforge`，而它与 neoforge 用的 `net.neoforged.moddev` 是同一个
-    // artifact 同一个版本，所以它只是同一构建里的另一个窗口。依据见 docs/MULTIPLATFORM.md 第六节。
-    include("forge:forge-1.20.1")
-}
+include("forge:forge-26.1")
+include("forge:forge-1.20.1")

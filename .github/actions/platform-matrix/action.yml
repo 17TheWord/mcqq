@@ -1,16 +1,20 @@
 name: Platform matrix
-description: 读 gradle.properties 的版本事实，按输入的筛选条件拼出平台矩阵（喂给 strategy.matrix）
+description: 扫目录树算平台矩阵（平台/窗口 = 一个含构建脚本的目录；事实在各自的 gradle.properties）
 
 # 这是"有哪些平台、每个 jar 叫什么、发布时算什么 loader、覆盖哪些游戏版本"的唯一出处。
+#
+# 逻辑在 `.github/scripts/platform-matrix.sh` —— 放在独立脚本里，CI 与本地跑的是同一份。
+# 加一个窗口 = 建一个 `平台/窗口/` 目录（含构建脚本 + gradle.properties 里的 publish_game_versions），
+# **不用改这个 action，也不用改 release.yml 的产物路径** —— 那些现在都是推导出来的。
 #
 # 为什么是 action 而不是工作流：这段逻辑本身没有 job 语义（不 checkout、不 build），
 # 只是一个"算出一份 JSON"的步骤 —— 放在 action 里，任何 job 都能中途 `uses:` 它。
 # 需要它喂给 `strategy.matrix` 时，外面再套一层可复用工作流
 # （`.github/workflows/platforms.yml`），原因见那个文件。
 #
-# ⚠️ 本 action 假定仓库**已经 checkout** 到当前工作目录（它要读 gradle.properties）。
+# ⚠️ 本 action 假定仓库**已经 checkout** 到当前工作目录（脚本要扫目录树）。
 
-# 寻址格式：矩阵每一行的名字是 **「平台-窗口起点」**（`fabric-26.1`、`forge-1.20.1`），
+# 寻址格式：矩阵每一行的名字是**窗口目录名**（`fabric-26.1`、`forge-1.20.1`），
 # 下面的筛选就是按它拆的 —— 这两个输入都按这个格式填。
 inputs:
   platforms:
@@ -28,113 +32,23 @@ inputs:
 
 outputs:
   version:
-    description: gradle.properties 里的 mod_version
-    value: ${{ steps.version.outputs.version }}
+    description: 根 gradle.properties 里的 mod_version
+    value: ${{ steps.matrix.outputs.version }}
   matrix:
     description: 平台矩阵，直接喂给 strategy.matrix
     value: ${{ steps.matrix.outputs.matrix }}
+  jars:
+    description: 每个窗口的产物路径，一行一个（release.yml 上传用）
+    value: ${{ steps.matrix.outputs.jars }}
 
 runs:
   using: composite
   steps:
-    # 版本号与"发布时声称的游戏窗口"都从 gradle.properties 读 —— 那里是它们唯一的出处
-    # （描述符里的范围也由 Gradle 从同一份文件 expand 出来）。窗口各一份，所以这里读两次。
-    - name: Read the version facts from gradle.properties
-      id: version
-      shell: bash
-      run: |
-        VERSION=$(grep -E "^mod_version=" gradle.properties | cut -d "=" -f 2)
-        V26_1=$(grep -E "^publish_game_versions_26_1=" gradle.properties | cut -d "=" -f 2)
-        V1_20_1=$(grep -E "^publish_game_versions_1_20_1=" gradle.properties | cut -d "=" -f 2)
-        echo "version=$VERSION" >> $GITHUB_OUTPUT
-        echo "v26_1=$V26_1"     >> $GITHUB_OUTPUT
-        echo "v1_20_1=$V1_20_1" >> $GITHUB_OUTPUT
-        echo "version=$VERSION  26.1=$V26_1  1.20.1=$V1_20_1"
-
-    - name: Generate the platform matrix
+    - name: Derive the platform matrix from the directory tree
       id: matrix
       shell: bash
-      # ⚠️ 版本号必须这样从**上一步的 output** 注入，不能用 shell 变量 $VERSION ——
-      # 上一步是另一个 shell 进程，变量不会传过来（第一次就踩了这个：矩阵里 %s 全成了空串）。
+      # 筛选条件走环境变量传进去；脚本自己读根 gradle.properties 拿 mod_version 与 archives_base_name。
       env:
-        VERSION: ${{ steps.version.outputs.version }}
-        V26_1: ${{ steps.version.outputs.v26_1 }}
-        V1_20_1: ${{ steps.version.outputs.v1_20_1 }}
-        WANT_PLATFORMS: ${{ inputs.platforms }}
-        WANT_VERSIONS: ${{ inputs.versions }}
-      run: |
-        # 空格和大小写都不该让筛选失灵。
-        WANT_PLATFORMS=$(echo "$WANT_PLATFORMS" | tr -d ' ' | tr 'A-Z' 'a-z')
-        WANT_VERSIONS=$(echo "$WANT_VERSIONS" | tr -d ' ' | tr 'A-Z' 'a-z')
-        # `all` 是手动入口那个下拉框的"全部"（workflow_dispatch 的 choice 不能留空，所以得有个显式的词）。
-        # 程序化调用直接传空串 —— 两者等价。
-        [ "$WANT_PLATFORMS" = "all" ] && WANT_PLATFORMS=""
-        [ "$WANT_VERSIONS" = "all" ] && WANT_VERSIONS=""
-
-        # 这个窗口名要不要。名字的格式是「平台-窗口起点」，所以从两头切：
-        #   forge-1.20.1  →  平台 forge，窗口 1.20.1
-        want() {
-          name=$1
-          platform=${name%%-*}
-          window=${name##*-}
-          if [ -n "$WANT_VERSIONS" ]; then
-            matched=0
-            for v in ${WANT_VERSIONS//,/ }; do
-              [ "$v" = "$window" ] && matched=1
-            done
-            [ "$matched" = 1 ] || return 1
-          fi
-          if [ -n "$WANT_PLATFORMS" ]; then
-            matched=0
-            for p in ${WANT_PLATFORMS//,/ }; do
-              if [ "$p" = "$platform" ] || [ "$p" = "$name" ]; then matched=1; fi
-            done
-            [ "$matched" = 1 ] || return 1
-          fi
-          return 0
-        }
-
-        # 一行一个平台。参数：窗口名、Gradle 子项目、jar（仓库相对路径）、发布用的 loaders、
-        # 这个窗口声称的游戏版本、这个平台需要的额外 Gradle 参数。
-        #
-        # 那个 properties 字段是必要的：Forge 在 settings.gradle.kts 里是**按需 include** 的
-        # （它的工具链在配置阶段下载），而 Gradle 会配置所有 include 的项目 —— 所以只有 forge 那两格
-        # 才该带 -PwithForge=true，否则每格都要白下一遍 Forge 工具链。
-        #
-        # loaders 只写真跑过的：Bukkit 那份是 Paper 与 Folia（Spigot 明确不支持，插件会自己停用并说明）。
-        #
-        # ⚠️ game-versions 是**每个窗口一份**（`publish_game_versions_26_1` / `_1_20_1`），不能共用 ——
-        # 26.x 的 jar 装不到 1.20.1 上。
-        rows=()
-        add_row() {
-          name=$1 project=$2 jar=$3 loaders=$4 game_versions=$5 properties=$6
-          want "$name" || return 0
-          rows+=("$(printf '{"name":"%s","project":"%s","jar":"%s","loaders":"%s","game-versions":"%s","properties":"%s"}' \
-            "$name" "$project" "$jar" "$loaders" "$game_versions" "$properties")")
-        }
-
-        add_row fabric-26.1    :fabric:fabric-26.1      "fabric/fabric-26.1/build/libs/mc-qq-fabric-26.1-$VERSION.jar"       "fabric"       "$V26_1"   ""
-        add_row neoforge-26.1  :neoforge:neoforge-26.1  "neoforge/neoforge-26.1/build/libs/mc-qq-neoforge-26.1-$VERSION.jar" "neoforge"     "$V26_1"   ""
-        add_row forge-26.1     :forge:forge-26.1        "forge/forge-26.1/build/libs/mc-qq-forge-26.1-$VERSION.jar"           "forge"        "$V26_1"   "-PwithForge=true"
-        # ⚠️ spigot / paper 这两行与 forge 不同：它们**一个 jar 覆盖 1.20.1 → 26.x**
-        # （编译对最老的 paper-api / spigot-api 1.20.1，描述符里 api-version 是 1.20）。
-        # 所以 game-versions 是**并集** —— 只写 26.x 的话，1.20.1 的用户在 Modrinth 上搜不到。
-        # 行名按"窗口起点"取，也就是 1.20.1；`versions=1.20.1` 筛得到它们，`versions=26.1` 筛不到。
-        # 两份列表合成**一个**数组：game-versions 要的是 JSON 数组，
-        # 直接写成 "$V1_20_1,$V26_1" 会拼出两个数组（`[..],[..]`），mc-publish 不认。
-        SPIGOT_PAPER_VERSIONS="[$(echo "$V1_20_1" | tr -d '[]'), $(echo "$V26_1" | tr -d '[]')]"
-        add_row spigot-1.20.1  :spigot:spigot-1.20.1    "spigot/spigot-1.20.1/build/libs/mc-qq-spigot-1.20.1-$VERSION.jar"     "spigot"       "$SPIGOT_PAPER_VERSIONS" ""
-        add_row paper-1.20.1   :paper:paper-1.20.1      "paper/paper-1.20.1/build/libs/mc-qq-paper-1.20.1-$VERSION.jar"       "paper folia"  "$SPIGOT_PAPER_VERSIONS" ""
-        add_row forge-1.20.1   :forge:forge-1.20.1      "forge/forge-1.20.1/build/libs/mc-qq-forge-1.20.1-$VERSION.jar"       "forge"        "$V1_20_1" "-PwithForge=true"
-
-        # 筛出空集要当场报错：拼错一个平台名却"构建成功但什么都没出"，比直接失败难查得多。
-        if [ ${#rows[@]} -eq 0 ]; then
-          echo "::error::没有匹配的平台/窗口 —— platforms='${WANT_PLATFORMS:-<全部>}' versions='${WANT_VERSIONS:-<全部>}'。"
-          echo "::error::可用的窗口：fabric-26.1 neoforge-26.1 forge-26.1 forge-1.20.1 paper-1.20.1 spigot-1.20.1"
-          exit 1
-        fi
-
-        matrix=$(printf '{"include":[%s]}' "$(IFS=,; echo "${rows[*]}")")
-        echo "$matrix"
-        echo "选中 $((${#rows[@]})) 格"
-        echo "matrix=$matrix" >> $GITHUB_OUTPUT
+        INPUT_PLATFORMS: ${{ inputs.platforms }}
+        INPUT_VERSIONS: ${{ inputs.versions }}
+      run: bash .github/scripts/platform-matrix.sh
