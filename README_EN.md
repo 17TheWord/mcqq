@@ -2,6 +2,10 @@
 🌍 English / <a href="README.md">中文</a>
 </div>
 
+<p align="center">
+  <img src="./assets/logo.png" width="200" height="200" alt="mc-qq">
+</p>
+
 <div align="center">
 
 # MC ↔ QQ Bot
@@ -228,6 +232,10 @@ templates:
   mc-chat: "[MC] {player}: {text}"
   mc-join: "[MC] {player} joined the game"
   mc-death: "[MC] {player} died (killed by {killer})"
+
+  # How @-mentions read. These are **fragments** (dropped into {text}); empty = remove.
+  mention-user: "§a@{name}§r"     # @someone, green; the text after it keeps the default colour
+  mention-emoji: "[emoji]"
 ```
 
 Available placeholders:
@@ -243,6 +251,8 @@ Available placeholders:
 | `{killer}`   | Killer name                    |
 | `{platform}` | Source platform                |
 | `{time}`     | Time                           |
+| `{name}`     | Name of the @-ed user (`mention-*` only) |
+| `{id}`       | Raw id (`mention-*` only)      |
 
 Unrecognised placeholders are kept as-is, which makes configuration mistakes easy to spot.
 

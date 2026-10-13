@@ -20,6 +20,11 @@ templates:
   qq-attachment:    "§b[QQ {group}]§r {user} 发了 {count} 个附件（文字里不含它们）"
   qq-member-add:    "§8[QQ {group}] {member} 进了群§r"
   qq-member-remove: "§8[QQ {group}] {member} 退了群§r"
+  # QQ -> MC：@ 标记怎么渲染（**片段**，插进 {text} 里，不是整行）
+  mention-user:     "§a@{name}§r"
+  mention-channel:  "§b#{id}§r"
+  mention-emoji:    "[表情]"
+  mention-everyone: "§e@所有人§r"
   # MC -> QQ
   mc-chat:  "[MC] {player}: {text}"
   mc-join:  "[MC] {player} 加入了世界"
@@ -31,7 +36,13 @@ templates:
 * 占位符全部由 core 自己填，**平台零成本**：
   `{group}` 群标签、`{user}` / `{member}` QQ 侧昵称或尾号、`{text}` 正文、`{count}` 附件数、
   `{player}` 玩家名、`{killer}` 凶手名、`{platform}` 平台标识、`{time}` 时间。
+* **`mention-*` 那四个是片段，不是整行** —— 它们替换掉 `{text}` 里的一段，所以值里带 `§` 颜色码是正常用法：
+  `§a@{name}§r` 让名字变绿、`§r` 把颜色复位，后面的正文仍是聊天栏的默认色。
+  可用占位符只有 `{name}`（QQ 昵称，查得到才有）和 `{id}`（原始 id，总在）。
+  **空串 = 把这个标记删掉**（等于回到"聊天栏里看不到 @"的老样子）。
+  名字来自消息事件自带的 `mentions` 数组，**不调任何 QQ 接口** —— 无线程、无限流、也不需要额外权限。
 * **`§` 颜色码**：QQ→MC 方向原样交给 adapter 渲染；MC→QQ 方向**剥掉**（QQ 渲染不了 `§`）。
+  注意陌生人文本（正文和昵称）里的 `§` 会先被剥掉，我们模板自己写的 `§` 不受影响。
 * **未知占位符要报出来**：`{plyer}` 这种拼错进 `BridgeConfig.problems()`（`/qq status` 里能看到），
   **不能静默渲染成空** —— 服主会以为功能坏了。
 

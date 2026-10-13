@@ -136,6 +136,14 @@ class QqToMcTest {
 
     /** G1 是绑定群（管理员可执行命令）；OWNER 只在私聊白名单里。 */
     private BridgeConfig config(FakeRcon rcon) throws IOException {
+        return config(rcon, "");
+    }
+
+    /**
+     * 同上，但可以在 {@code templates:} 段里塞额外的键 —— 用来测"运维把某个 mention-* 改成空值"这类事。
+     * {@code extraTemplates} 是**已经缩进好的 YAML 片段**（可含多行），没有就传空串。
+     */
+    private BridgeConfig config(FakeRcon rcon, String extraTemplates) throws IOException {
         Files.createDirectories(serverDir.resolve("plugins"));
         Files.writeString(serverDir.resolve("server.properties"), """
                 enable-rcon=true
@@ -144,11 +152,12 @@ class QqToMcTest {
                 """.formatted(rcon.port()), StandardCharsets.UTF_8);
         Path file = serverDir.resolve("plugins").resolve("mcqq").resolve("config.yml");
         Files.createDirectories(file.getParent());
+        String templates = extraTemplates.isEmpty() ? "" : "templates:\n" + extraTemplates;
         Files.writeString(file, """
                 command:
                   enabled: true
                   prefix: "/mcc"
-
+                """ + templates + """
                 bots:
                   - id: main
                     app-id: "1"
@@ -185,6 +194,26 @@ class QqToMcTest {
                 + openid + "\",\"username\":\"某人\"}}").getAsJsonObject();
         return new QQMessageEvent(id, 0, null, EventType.C2C_MESSAGE_CREATE.name(),
                 EventType.C2C_MESSAGE_CREATE, data, recorder());
+    }
+
+    /**
+     * 带 {@code mentions} 的群消息。@ 标记的渲染全靠这个数组 —— 它装的是**平台抄送过来的昵称**，
+     * 所以渲染名字不需要调任何 QQ 接口。
+     */
+    private QQMessageEvent groupWithMentions(String id, String groupOpenid, String content,
+            String mentionsJson) {
+        JsonObject data = JsonParser.parseString("{\"group_openid\":\"" + groupOpenid
+                + "\",\"content\":\"" + content + "\",\"mentions\":" + mentionsJson
+                + ",\"author\":{\"member_openid\":\"BOSS\",\"member_role\":\"admin\","
+                + "\"username\":\"某人\"}}").getAsJsonObject();
+        return new QQMessageEvent(id, 0, null, EventType.GROUP_MESSAGE_CREATE.name(),
+                EventType.GROUP_MESSAGE_CREATE, data, recorder());
+    }
+
+    /** 一条消息广播出来的那一行；没有广播就断言失败。 */
+    private String onlyLine() {
+        assertEquals(1, broadcasts.size(), broadcasts.toString());
+        return broadcasts.get(0);
     }
 
     @Test
@@ -246,6 +275,97 @@ class QqToMcTest {
                     "运维该被告知怎么把它绑上：" + log);
             assertEquals(List.of(), replies, "既不执行，也就不回话");
             assertEquals("", rcon.lastCommand(), "更不该把命令发进服务器");
+        }
+    }
+
+    // ── @ 标记的渲染 ───────────────────────────────────────────────────────────────────────────
+    //
+    // SDK 的 content() 会把 mentions 背书过的 <@...> 删掉（判命令前缀要的就是那个结果），
+    // 但聊天栏需要的是"他 @ 了谁"。所以展示这条路改走原始正文 + mentions 里的昵称。
+    // 名字是平台抄送过来的，**不调任何接口**，所以这里不需要起 bot、也不需要假 HTTP。
+
+    @Test
+    void anAtMentionOfAnotherMemberIsShownByName() throws Exception {
+        try (FakeRcon rcon = new FakeRcon("hunter2", OUTPUT)) {
+            listener(config(rcon), new UnboundGroups()).onGroupMessage(groupWithMentions(
+                    "e1", "G1", "<@AA11BB22CC33DD44> 早上好",
+                    "[{\"id\":\"AA11BB22CC33DD44\",\"member_openid\":\"AA11BB22CC33DD44\","
+                            + "\"username\":\"小明\",\"bot\":false}]"));
+
+            String line = onlyLine();
+            // §a 让名字变绿，§r 把颜色复位 —— 所以后面「早上好」仍是聊天栏的默认色。
+            assertTrue(line.endsWith("§a@小明§r 早上好"), line);
+            assertFalse(line.contains("<@"), "原始标记不该漏进聊天栏：" + line);
+        }
+    }
+
+    @Test
+    void aMentionNameCannotSmuggleColourCodesOrExtraLines() throws Exception {
+        try (FakeRcon rcon = new FakeRcon("hunter2", OUTPUT)) {
+            // 昵称来自 QQ，同样是陌生人文本：借它调色、或者塞一行假日志都不行。
+            listener(config(rcon), new UnboundGroups()).onGroupMessage(groupWithMentions(
+                    "e1", "G1", "<@AA11BB22CC33DD44> 在吗",
+                    "[{\"id\":\"AA11BB22CC33DD44\",\"username\":\"§c[系统]\\n假行\"}]"));
+
+            String line = onlyLine();
+            assertTrue(line.contains("@[系统] 假行"), line);
+            assertFalse(line.contains("§c"), "昵称里的格式码该被剥掉：" + line);
+            assertFalse(line.contains("\n"), "昵称里的换行不该变成第二行：" + line);
+        }
+    }
+
+    @Test
+    void anIdNobodyVouchesForFallsBackToAShortId() throws Exception {
+        try (FakeRcon rcon = new FakeRcon("hunter2", OUTPUT)) {
+            // mentions 里没有这个人（平台偶尔不给全）—— 至少别把整串 id 漏出去。
+            listener(config(rcon), new UnboundGroups()).onGroupMessage(groupWithMentions(
+                    "e1", "G1", "<@AA11BB22CC33DD44> 你好", "[]"));
+
+            String line = onlyLine();
+            assertTrue(line.contains("@33DD44"), "退回 id 后 6 位：" + line);
+            assertFalse(line.contains("AA11BB22CC33DD44"), line);
+        }
+    }
+
+    @Test
+    void aChannelMentionAndAnEmojiDoNotLeakTheirRawTokens() throws Exception {
+        try (FakeRcon rcon = new FakeRcon("hunter2", OUTPUT)) {
+            // 实测平台一般已经把子频道渲染成 "#名字" 推过来，<#id> 是兜底；
+            // <emoji:277> 则确实会原样过来，SDK 和平台都不转。
+            listener(config(rcon), new UnboundGroups()).onGroupMessage(groupWithMentions(
+                    "e1", "G1", "看这个 #test2 <emoji:277>", "[]"));
+
+            String line = onlyLine();
+            assertTrue(line.contains("#test2"), "平台已经渲染好的部分原样保留：" + line);
+            assertTrue(line.contains("[表情]"), line);
+            assertFalse(line.contains("<emoji:"), "原始表情标记不该漏出去：" + line);
+        }
+    }
+
+    @Test
+    void anUnclosedBracketLeavesTheRestOfTheLineAlone() throws Exception {
+        try (FakeRcon rcon = new FakeRcon("hunter2", OUTPUT)) {
+            // 半个标记（没有配对的 >）不该把后面的正文一起吞掉 —— 和 SDK 的收尾方式一致。
+            listener(config(rcon), new UnboundGroups()).onGroupMessage(groupWithMentions(
+                    "e1", "G1", "3 < 5 而且 <@AA11BB22CC33DD44", "[]"));
+
+            String line = onlyLine();
+            assertTrue(line.contains("3 < 5 而且"), line);
+        }
+    }
+
+    @Test
+    void aGroupCanTurnMentionRenderingOffWithAnEmptyFormat() throws Exception {
+        try (FakeRcon rcon = new FakeRcon("hunter2", OUTPUT)) {
+            // 空值 = 把这个标记删掉，也就是回到"聊天栏里看不到 @"的老样子。
+            listener(config(rcon, "  mention-user: \"\"\n"), new UnboundGroups()).onGroupMessage(
+                    groupWithMentions("e1", "G1", "<@AA11BB22CC33DD44> 早上好",
+                            "[{\"id\":\"AA11BB22CC33DD44\",\"username\":\"小明\"}]"));
+
+            String line = onlyLine();
+            assertTrue(line.contains("早上好"), line);
+            assertFalse(line.contains("小明"), "关掉之后不该再渲染名字：" + line);
+            assertFalse(line.contains("<@"), line);
         }
     }
 }

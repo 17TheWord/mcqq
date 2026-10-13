@@ -102,8 +102,12 @@ public final class QqToMc {
             Log.debug("群 " + target.label() + " 配成了只出不进，忽略这条消息");
             return;
         }
-        // content() 里 @ 标记已经由 SDK 剥掉了（<@openid> 在 MC 里没有意义）；剩下的部分是陌生人文本，净化再用。
-        String content = sanitize(message.content());
+        // 这里刻意**不用** content()：它会把 mentions 背书过的 <@...> 删掉，而删掉之后"他 @ 了谁"
+        // 就再也看不出来了。所以拿原始正文，交给 Mentions 按位置换成昵称（先净化，再渲染 ——
+        // 反过来的话 sanitize 会把我们自己的 §a/§r 颜色码一起剥掉）。
+        // 命令那条路（McCommands）仍然用 content()，@bot 的前缀剥离不受影响。
+        String content = Mentions.render(sanitize(rawContent(message)), message.mentions(), config,
+                target.conversationId());
         if (content.isEmpty()) {
             Log.debug("群 " + target.label() + " 的消息没有文字内容，忽略");
             return;
@@ -203,6 +207,17 @@ public final class QqToMc {
     }
 
     /**
+     * 事件的<strong>原始</strong>正文，即 {@code d.content}。
+     *
+     * <p>SDK 的 {@code content()} 会把 {@code mentions} 背书过的 {@code <@...>} 删掉 —— 那是给"判命令前缀"
+     * 用的。要按位置渲染昵称就得拿没动过的这一份，所以这里直接读负载。
+     */
+    private static String rawContent(QQMessageEvent message) {
+        com.google.gson.JsonElement content = message.rawObject().get("content");
+        return content == null || !content.isJsonPrimitive() ? "" : content.getAsString();
+    }
+
+    /**
      * 陌生人文本进服务器前的净化：剥掉 § 格式码 —— 否则借颜色码就能伪造别的玩家的发言、给聊天栏调色；
      * 控制字符（含换行）折成空格 —— 一条 QQ 消息不该能在日志或聊天栏里凭空多出几行。
      *
@@ -217,7 +232,8 @@ public final class QqToMc {
                 .replaceAll("[\\p{Cntrl}]+", " ").trim();
     }
 
-    private static String shortId(String openid) {
+    /** 兜底显示用：id 太长，取尾巴几位；空 id 给个能读的词。{@link Mentions} 也用这个。 */
+    static String shortId(String openid) {
         if (openid == null || openid.isBlank()) {
             return "未知用户";
         }

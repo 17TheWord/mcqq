@@ -29,6 +29,16 @@ templates:
   mc-quit: "[MC] {player} 离开了世界"
   mc-death: "[MC] {player} 死亡（{killer}）"
 
+  # ── 下面四个不是"整行文案"，是**片段**：它们替换掉 {text} 里的一段 @ 标记 ──
+  # 可用占位符只有 {name}（QQ 昵称，查得到才有）和 {id}（原始 id，总在）。
+  # 值里带 § 颜色码是正常用法。**填空字符串 = 把这个标记删掉**（回到"聊天栏里看不到 @"的样子）。
+  #
+  # 名字从消息事件自带的 mentions 数组里取，不额外调任何 QQ 接口，所以没有限流、不需要额外权限。
+  mention-user: "§a@{name}§r"        # @某人（群和频道共用）。绿字，§r 之后正文恢复默认色
+  mention-channel: "§b#{id}§r"       # #子频道。实测平台通常已经渲染成 "#名字" 推过来，这条很少触发
+  mention-emoji: "[表情]"             # 系统表情 <emoji:277>。SDK 和平台都不转，这里给个可读的占位
+  mention-everyone: "§e@所有人§r"     # @所有人（纯文本，没有尖括号）
+
 bots:
   - id: main                       # 随便起个名字，它会出现在 /qq status 里
     app-id: "REPLACE_ME"           # QQ 开放平台的 AppID
