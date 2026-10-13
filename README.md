@@ -232,6 +232,10 @@ templates:
   mc-chat: "[MC] {player}: {text}"
   mc-join: "[MC] {player} 加入了世界"
   mc-death: "[MC] {player} 死亡（{killer}）"
+
+  # @ 标记怎么显示。它们是**片段**（插进 {text} 里），空串 = 删掉。
+  mention-user: "§a@{name}§r"     # @某人，绿字，后面正文恢复默认色
+  mention-emoji: "[表情]"
 ```
 
 可用占位符：
@@ -247,6 +251,8 @@ templates:
 | `{killer}`   | 凶手名称          |
 | `{platform}` | 来源平台          |
 | `{time}`     | 时间            |
+| `{name}`     | 被 @ 的人的名字（只在 `mention-*` 里） |
+| `{id}`       | 原始 id（只在 `mention-*` 里） |
 
 未识别的占位符会原样保留，便于发现配置错误。
 

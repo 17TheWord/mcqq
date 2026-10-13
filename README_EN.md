@@ -232,6 +232,10 @@ templates:
   mc-chat: "[MC] {player}: {text}"
   mc-join: "[MC] {player} joined the game"
   mc-death: "[MC] {player} died (killed by {killer})"
+
+  # How @-mentions read. These are **fragments** (dropped into {text}); empty = remove.
+  mention-user: "§a@{name}§r"     # @someone, green; the text after it keeps the default colour
+  mention-emoji: "[emoji]"
 ```
 
 Available placeholders:
@@ -247,6 +251,8 @@ Available placeholders:
 | `{killer}`   | Killer name                    |
 | `{platform}` | Source platform                |
 | `{time}`     | Time                           |
+| `{name}`     | Name of the @-ed user (`mention-*` only) |
+| `{id}`       | Raw id (`mention-*` only)      |
 
 Unrecognised placeholders are kept as-is, which makes configuration mistakes easy to spot.
 
