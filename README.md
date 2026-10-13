@@ -2,6 +2,10 @@
 🌍 <a href="README_EN.md">English</a> / 中文
 </div>
 
+<p align="center">
+  <img src="./assets/logo.png" width="200" height="200" alt="mc-qq">
+</p>
+
 <div align="center">
 
 # MC ↔ QQ Bot
