@@ -31,6 +31,8 @@
 
 ## 介绍
 
+> Vibe Project
+
 `MC ↔ QQ Bot` 是一个 Minecraft 服务端 Mod / Plugin，通过 QQ 官方机器人 API v2 将 QQ 与 Minecraft 服务端连接起来。
 
 项目基于 [`qqbot-java-sdk`](https://github.com/skiesworld/qqbot-java-sdk) 接入 QQ 开放平台，支持 QQ 群、频道文字子频道和私聊，并可以分别配置不同目标的消息收发方向。

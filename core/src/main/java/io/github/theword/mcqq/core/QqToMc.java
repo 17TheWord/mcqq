@@ -11,22 +11,15 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * QQ → Minecraft. Group chat, @-mentions and the join/leave notices are put in the players' chat and echoed to
- * the console; the bot's own private chats with users are deliberately not, since nobody on the server asked.
+ * QQ → Minecraft：群聊、@ 标记、成员进出播报进玩家聊天栏并回显到控制台；
+ * 机器人<b>自己的私聊</b>不播报 —— 服务器里没人问过。
  *
- * <p>What each line looks like is the operator's business now: the values are collected here and the wording
- * comes from the template in force for that group (see {@link Templates}). An empty template means the group
- * wants this event to stay quiet.
+ * <p>行长什么样由运维的模板决定，这里只收集值；空模板 = 这个事件静音。
+ * 消息被丢掉的每种原因都说一句 {@link Log#debug}。
+ * 未绑定的群是例外：记进 {@link UnboundGroups}、WARN 一次带上 id，而不是无声丢掉。
  *
- * <p>Every way a message can be dropped says so through {@link Log#debug} — a group set to outgoing only, a
- * duplicate push from the platform. Silence is the hardest thing to debug.
- *
- * <p>The one exception is an unbound group, and it is the important one: that is the case where the operator is
- * still trying to find out what to put in the file. It goes into {@link UnboundGroups} and is logged once at
- * WARN with the id they need, instead of being dropped without a trace.
- *
- * <p>Everything lands on the receiving thread of the SDK's dispatcher, so the one thing done here is handing the
- * line to the platform, which owns the hop onto the game's thread. Nothing blocking belongs on that path.
+ * <p>一切发生在 SDK dispatcher 的接收线程上，所以这里只把行交给平台、由它跳上游戏线程；
+ * 这条路上不该有阻塞。
  */
 public final class QqToMc {
 
@@ -102,10 +95,8 @@ public final class QqToMc {
             Log.debug("群 " + target.label() + " 配成了只出不进，忽略这条消息");
             return;
         }
-        // 这里刻意**不用** content()：它会把 mentions 背书过的 <@...> 删掉，而删掉之后"他 @ 了谁"
-        // 就再也看不出来了。所以拿原始正文，交给 Mentions 按位置换成昵称（先净化，再渲染 ——
-        // 反过来的话 sanitize 会把我们自己的 §a/§r 颜色码一起剥掉）。
-        // 命令那条路（McCommands）仍然用 content()，@bot 的前缀剥离不受影响。
+        // 不用 content()（它删掉了 @ 标记，聊天栏就看不出“他 @ 了谁”）；先净化再渲染，否则
+        // sanitize 会把自己加的 §a/§r 一起剥掉。命令路径（McCommands）仍用 content()。
         String content = Mentions.render(sanitize(rawContent(message)), message.mentions(), config,
                 target.conversationId());
         if (content.isEmpty()) {

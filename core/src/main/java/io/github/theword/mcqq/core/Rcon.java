@@ -20,18 +20,10 @@ import java.util.Properties;
 /**
  * 用服务端自己的 RCON 跑命令，把回显拿回来。
  *
- * <p><b>为什么是 RCON 而不是在进程里直接派发</b>：CraftBukkit 明确拒绝非 Craft 的
- * {@code CommandSender} 去跑原版命令（{@code IllegalArgumentException: Cannot make ... a vanilla
- * command listener}），而"真正的发送者"的输出直接进日志，外面套一层收不到。RCON 是唯一一条
- * "发一条命令、拿回一段文本"的路，而且它对所有平台**都是同一套协议** —— 所以这里一处实现，
- * 五个适配器一行都不用改。
+ * <p>必须走 RCON 而不是进程内派发：CraftBukkit 拒绝非 Craft 的 {@code CommandSender} 跑原版命令，
+ * 而“真正的发送者”的输出直接进日志、外面收不到。RCON 对所有平台是同一套协议。
  *
- * <p>地址从服务端自己的 {@code server.properties} 读（{@code enable-rcon} / {@code rcon.port} /
- * {@code rcon.password}），所以运维不需要把密码再抄一份到我们的配置里；配置里那三个键是给
- * "RCON 不在默认位置"的情况用的。
- *
- * <p>协议本身很小：{@code [长度][序号][类型][正文][0x00][0x00]}，小端。类型 3 = 登录、2 = 命令。
- * 登录失败时服务端回一个序号为 -1 的包。
+ * <p>地址从 {@code server.properties} 读；协议是小端 {@code [长度][序号][类型][正文][00][00]}，3 = 登录、2 = 命令。
  */
 final class Rcon {
 

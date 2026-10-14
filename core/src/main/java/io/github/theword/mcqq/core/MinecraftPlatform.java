@@ -4,14 +4,10 @@ import io.github.theword.mcqq.core.command.CommandTree;
 import java.nio.file.Path;
 
 /**
- * Everything the bridge needs from the server it runs inside, and nothing more.
+ * 桥接需要服务端提供的全部东西 —— 一条缝，MC 的类一个都不跨过来。
  *
- * <p>This is the whole seam. {@code MinecraftServer}, {@code ServerPlayer} and {@code Component} never cross
- * it: an adapter hands over text that already carries {@code §} colour codes and decides for itself how to
- * render them, which is what keeps the core free of any Minecraft class and testable without a game.
- *
- * <p>The inbound direction (QQ → Minecraft) is {@link #broadcast}; the outbound direction (Minecraft → QQ) is
- * the adapter calling {@link Bridge#forward} from its own event listeners.
+ * <p>adapter 交进来的是已带 {@code §} 颜色码的文本，所以 core 不 import 任何 MC 类、离线可测。
+ * 入站（QQ → MC）走 {@link #broadcast}；出站由 adapter 在自己的监听里调 {@link Bridge#forward}。
  */
 public interface MinecraftPlatform {
 

@@ -1,37 +1,19 @@
 name: Release
 
-# **推一个 tag 就发一次。tag 本身就是发布版本。**
+# 推一个 v* 的 tag 就发一次（tag 本身就是版本号）；workflow_dispatch 填同一个 tag
+# 则是手动重跑 / 补发。版本号以 tag 为准，根 gradle.properties 的 mod_version
+# 只是本地开发默认值。
 #
-#   git tag v0.0.2        && git push origin v0.0.2         → 正式版
-#   git tag v0.0.2-beta   && git push origin v0.0.2-beta    → 预发布（--prerelease，Modrinth 的
-#                                                             version-type 也是 beta，照常上架）
+# 完整说明（闸门规则、为什么不再挂 push: main、补发某个平台的步骤、
+# 发布凭证怎么配）见 docs/RELEASING.md —— 这里只留编辑这个文件时
+# 一眼要用的。
 #
-# 版本号以 **tag** 为准：`v` 后面那串就是版本（`0.0.2` / `0.0.2-beta`），它会经 `-Pmod_version`
-# 一路进产物名与描述符（fabric.mod.json / mods.toml / plugin.yml）。
-# 根 `gradle.properties` 的 `mod_version` 只是**本地开发默认值**，发布时被 tag 覆盖。
+# 平台清单来自 .github/workflows/platforms.yml（唯一一份）。
 #
-# ⚠️ **tag 必须由人推（或非 GITHUB_TOKEN 的凭证推）。**
-# 用内置 `GITHUB_TOKEN` 推的 tag **不会触发其他工作流**（GitHub 防递归的规则），
-# 所以"一个工作流打 tag、另一个挂 tag 触发"那种写法，后者永远不会跑。
-# 这也正是本工作流**不再挂 `push: main`** 的原因：发版是一个**明确的动作** —— 推一个 tag，
-# 而不是"每次合并的副作用"（合并进 main 只跑 test.yml 那套 PR 检查，不发版）。
-#
-# ⚠️ **幂等：同一个 tag 已经有 Release 就整段跳过**，不会重复构建、重复上架。
-# 要重发就先删掉那个 Release 与 tag，再重新推 tag；或从 Actions → Release → Run workflow
-# 手动填那个 tag 再跑一次（用于"上次跑到一半失败、想接着跑"的情况）。
-#
-# ⚠️ GitHub Release **只放自动生成的变更日志，不带 jar** —— 下载入口是 Modrinth / CurseForge。
-#
-# 平台清单与 MC 窗口来自 .github/workflows/platforms.yml（**唯一一份**），所以加平台只改那一个文件。
-#
-# 形状照 17TheWord/QueQiao 的 .github/workflows/build.yml：先算出矩阵，再让**每个产物各跑一次
-# mc-publish**（并行，各自声明 loaders 与 game-versions）。
-#
-# 与那边唯一的差别：**构建不拆进矩阵**。QueQiao 每格是独立工程，所以每格自己 build；本项目一次
-# `./gradlew build` 就出全部产物，拆成四格只会把 MC 工具链下载四遍。
-#
-# 现阶段没有 Modrinth / CurseForge 的项目 id：**publish 整个 job 会被跳过**，
-# 构建、产物留存（Actions artifacts）与 GitHub Release 照常进行。
+# 形状：扫出矩阵 → gate 判断要不要发 → 在 tag 那个提交上构建
+# 一次（出全部产物）→ 每格产物各跑一次 mc-publish。
+# 构建不拆进矩阵：一次 ./gradlew build 就出全部产物，拆成 N 格
+# 只会把 MC 工具链下载 N 遍。
 on:
   push:
     tags:
@@ -221,4 +203,6 @@ jobs:
           # 每个窗口各自声明（各自 gradle.properties 里的 publish_game_versions，由矩阵脚本读出）：
           # 26.x 的 jar 装不到 1.20.1 上，共用一份列表会误导人。
           game-versions: ${{ matrix.game-versions }}
+          # CurseForge 必须选一个环境（否则 400 errorCode 1021），而 mc-publish 推不出插件的。
+          environment: server
           files: jars/${{ matrix.jar }}

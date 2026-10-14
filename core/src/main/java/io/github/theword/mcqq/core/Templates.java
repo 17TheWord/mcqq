@@ -12,27 +12,13 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * The message templates an operator can rewrite, and the placeholders they may use.
+ * 运维可改的消息文案，以及它们能用的占位符。
  *
- * <p>Every line the bridge prints or forwards used to be composed in Java, which meant a server owner could not
- * change a word of it. Now the wording lives in the config as a template with <em>named</em> placeholders
- * ({@code {player}}, {@code {text}}, …), and this class knows the two things that need to agree about them:
- * the set of names the bridge fills, and how to substitute them.
+ * <p>我们的占位符是 {@code {braces}}（第三方库用 {@code %percent%}，一份模板能同时带两种）。
+ * 没有值的占位符<b>原样留下</b>，不替换成空 —— 拼写错误会显示在游戏里，而不是变成一行空白。
  *
- * <p>Two deliberate choices:
- *
- * <ul>
- *   <li>Our placeholders are {@code {braces}}. The third-party placeholder libraries (Patbox's on the mod side,
- *       HelpChat's on Bukkit) both use {@code %percent%}, so a template can carry both without ambiguity —
- *       and ours is the one that always resolves.
- *   <li>A placeholder with no value is left <em>as written</em> rather than replaced with nothing. A typo then
- *       shows up in game instead of turning into a silently empty line.
- * </ul>
- *
- * <p>Not every key here is a whole line. The {@code mention-*} four are <em>fragments</em>: they replace a piece
- * inside {@code {text}} and may legitimately carry {@code §} colour codes — see {@link #MENTION_USER}. They live
- * in the same map because the machinery around it (built-in defaults, auto-fill on upgrade, {@code /qq templates},
- * per-target overrides) is exactly what they need, not because they are the same kind of thing.
+ * <p>{@code mention-*} 那四个不是整行，是<em>片段</em>：替换 {@code {text}} 里的一段，
+ * 所以值里带 {@code §} 颜色码是正常用法（见 {@link #MENTION_USER}）。
  */
 public final class Templates {
 

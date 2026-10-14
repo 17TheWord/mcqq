@@ -8,17 +8,14 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The groups that have talked to a bot without being bound in the config.
+ * 跟机器人说过话、但配置里还没有的会话。
  *
- * <p>It exists because of the order things happen in: the config asks for a {@code group-openid}, and the only
- * way to learn one is for the group to send a message — which is also the exact moment the bridge has to decide
- * what to do with a group it does not recognise. Dropping it quietly leaves the operator with nothing to paste
- * into the file, and a log is not always where the operator is looking. So it is remembered instead:
- * reported in the log once per group, listed by {@code /qq status}, and accepted by {@code /qq bind} without
- * anyone having to copy an id.
+ * <p>存在的原因是顺序：配置要 {@code group-openid}，而知道它的唯一途径是群里发一条消息 ——
+ * 那正是桥接要决定“拿这个不认识的群怎么办”的时刻。悄悄丢掉，运维就没什么可粘；
+ * 记在日志里又未必是他会看的地方。所以记住它：日志每群一次、{@code /qq status} 列出、
+ * {@code /qq bind} 直接认。
  *
- * <p>Bounded on purpose — a bot sitting in a busy group nobody ever bound should not grow this forever — and it
- * outlives a {@code /qq reload}, because that is when the operator is most likely to be looking at it.
+ * <p>有上限，且比 {@code /qq reload} 活得长。
  */
 public final class UnboundGroups {
 
@@ -47,8 +44,6 @@ public final class UnboundGroups {
     private final Map<String, Seen> byOpenid = new LinkedHashMap<>(16, 0.75f, false) {
         @Override
         protected boolean removeEldestEntry(Map.Entry<String, Seen> eldest) {
-            // A bot sitting in a busy group nobody ever bound would otherwise grow this for as long as the
-            // server runs. Nothing here is worth keeping forever — the operator binds one group at a time.
             return size() > LIMIT;
         }
     };

@@ -8,7 +8,7 @@
 
 | | 情况 | 例子 | 要做什么 |
 | --- | --- | --- | --- |
-| ① | 新版本，我们碰的 API 没变 | 26.1.2 → 26.2 | 改版本事实 → 真机跑 → 把窗口写进那个窗口的 `publish_game_versions_*`。**代码零改动。** |
+| ① | 新版本，我们碰的 API 没变 | 26.1.2 → 26.2 | 改版本事实 → 真机跑 → 把窗口写进那个窗口的 `publish_game_versions`。**代码零改动。** |
 | ② | API 变了，但旧写法还在（改名留别名、加了个重载） | 未遇到 | 改**那一个平台**的 adapter（一两处），core 不动，**仍是一个 jar 覆盖两版** |
 | ③ | API 变了且旧写法没了（二进制不兼容） | 未遇到（26.1 的 `Commands.hasPermission(int)` 是这一类） | 一个 jar 覆盖不了 → **加一个"版本窗口"子项目**，见第四节 |
 
@@ -54,8 +54,8 @@ Fabric 侧用 26.2 的依赖**源码一行没改就编译通过并加载**。26.
    `paper/paper-1.20.1/run`（Paper 26.2）、`paper/paper-1.20.1/run-1.20.1`（Paper 1.20.1）、
    `fabric/fabric-26.1/run`、`neoforge/neoforge-26.1/run`、`forge/forge-26.1/run`、`forge/forge-1.20.1/run`。
    跑 `/qq status` 看 `平台 xxx-<新版本>`，再跑 `/qq help`。
-5. 把窗口写进 `publish_game_versions_*`（Modrinth / CurseForge 声称的范围），**只写实测过的**。
-   每个窗口一份（`_26_1` / `_1_20_1`），不能共用：mod 平台的 jar 是按窗口编译的。
+5. 把窗口写进 `publish_game_versions`（Modrinth / CurseForge 声称的范围），**只写实测过的**。
+   每个窗口一份，不能共用：mod 平台的 jar 是按窗口编译的。
    （Bukkit 一族是例外 —— 那两份编译对 1.20.1，一个 jar 覆盖整段，见
    [MULTIPLATFORM.md](MULTIPLATFORM.md) 第三节。）
 6. 若是 ③：在 `.github/workflows/platforms.yml` 的矩阵里加一行（含它那个窗口的 `game-versions`），

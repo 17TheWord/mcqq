@@ -7,26 +7,15 @@ import java.util.Map;
 /**
  * QQ 消息正文里的 {@code @} 标记 → 聊天栏里读得懂的东西。
  *
- * <p>为什么需要这一层：SDK 的 {@code QQMessageEvent.content()} 会把 {@code mentions} 背书过的
- * {@code <@...>} <em>删掉</em>。判命令前缀要的正是那个结果，但<em>聊天栏</em>要的是相反的东西 ——
- * 「他 @ 了谁」。删掉之后位置就没了，所以这里改拿<em>原始</em>正文，自己按位置替换。
+ * <p>SDK 的 {@code content()} 会把 {@code mentions} 背书过的 {@code <@...>} 删掉（判命令前缀要的
+ * 就是那个结果），删了位置就没了、聊天栏看不出“他 @ 了谁”。所以这里拿<em>原始</em>正文自己替换。
  *
- * <p>四种标记，只有第一种有官方承诺：
+ * <p>四种标记里只有 {@code <@id>} 的名字是现成的（事件的 {@code mentions} 数组里就有，真机实测
+ * 群和频道都带 {@code username}），<b>不用调接口</b>；{@code <#id>} 平台通常已渲染成 {@code #名字}；
+ * {@code <emoji:id>} 和 {@code @everyone} 没人转，会原样漏出来。
  *
- * <ul>
- *   <li>{@code <@id>} / {@code <@!id>} —— @某人。名字就在事件的 {@code mentions} 数组里
- *       （真机实测：群和频道的 @用户 都在，且带 {@code username}），所以<strong>不用调任何接口</strong>。
- *   <li>{@code <#id>} —— #子频道。实测平台<strong>已经把子频道渲染成 {@code #名字}</strong> 推过来，
- *       所以这一支基本不会触发；真触发时手里只有 id，没有名字。
- *   <li>{@code <emoji:id>} —— 系统表情。SDK 不认、平台也不转，会原样漏出来。
- *   <li>{@code @everyone} —— @所有人，纯文本，没有尖括号。
- * </ul>
- *
- * <p>替换串来自 {@link Templates} 的四个 {@code mention-*} 键（空值 = 把这个标记删掉），
- * 所以颜色、要不要显示、显示成什么，都是运维的事。
- *
- * <p>解析边界和 SDK 的 {@code withoutMentions} 对齐：找 {@code <}、找配对的 {@code >}，
- * 配不上就到此为止、剩下的原样输出 —— 半个标记不该把后面的正文吞掉。
+ * <p>替换串来自 {@link Templates} 的 {@code mention-*} 键（空值 = 删掉这个标记）。
+ * 解析边界对齐 SDK 的 {@code withoutMentions}：配不上 {@code >} 就把剩下的原样输出。
  */
 final class Mentions {
 

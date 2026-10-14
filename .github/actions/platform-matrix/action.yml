@@ -1,16 +1,9 @@
 name: Platform matrix
 description: 扫目录树算平台矩阵（平台/窗口 = 一个含构建脚本的目录；事实在各自的 gradle.properties）
 
-# 这是"有哪些平台、每个 jar 叫什么、发布时算什么 loader、覆盖哪些游戏版本"的唯一出处。
-#
-# 逻辑在 `.github/scripts/platform-matrix.sh` —— 放在独立脚本里，CI 与本地跑的是同一份。
-# 加一个窗口 = 建一个 `平台/窗口/` 目录（含构建脚本 + gradle.properties 里的 publish_game_versions），
-# **不用改这个 action，也不用改 release.yml 的产物路径** —— 那些现在都是推导出来的。
-#
-# 为什么是 action 而不是工作流：这段逻辑本身没有 job 语义（不 checkout、不 build），
-# 只是一个"算出一份 JSON"的步骤 —— 放在 action 里，任何 job 都能中途 `uses:` 它。
-# 需要它喂给 `strategy.matrix` 时，外面再套一层可复用工作流
-# （`.github/workflows/platforms.yml`），原因见那个文件。
+# 这是"有哪些平台、每个 jar 叫什么、发布时算什么 loader"的唯一出处。
+# 逻辑在 `.github/scripts/platform-matrix.sh`（CI 与本地同一份）；外面套的工作流是
+# `.github/workflows/platforms.yml`，原因见那个文件。
 #
 # ⚠️ 本 action 假定仓库**已经 checkout** 到当前工作目录（脚本要扫目录树）。
 

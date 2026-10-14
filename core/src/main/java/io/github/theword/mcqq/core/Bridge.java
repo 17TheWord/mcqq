@@ -98,8 +98,8 @@ public final class Bridge {
         } else {
             lines.addAll(active.statusLines());
         }
-        // The groups that talked to a bot without being bound. This is the answer to "where does the
-        // group-openid come from", and it is here because /qq status is the first thing an operator runs.
+        // The answer to "where does the group-openid come from" — and it is here because /qq status is
+        // the first thing an operator runs.
         List<UnboundGroups.Seen> unbound = unboundGroups.all();
         if (!unbound.isEmpty()) {
             lines.add("收到过消息但没绑定的群（敲 /qq bind 绑最近那个，或 /qq bind <openid 前几位>）：");
@@ -111,12 +111,9 @@ public final class Bridge {
     }
 
     /**
-     * Binds a group that has already talked to a bot: writes it into the config and reloads, so the operator
-     * never has to open the file. Returns what to print.
+     * 把 {@link UnboundGroups} 里已有的目标写进配置并重载，返回要打印的话。
      *
-     * <p>Only targets in {@link UnboundGroups} can be bound this way, which is a safety property and not just
-     * a convenience: it means {@code /qq bind} can only ever attach something that has actually sent this bot
-     * a message, so a typo cannot wire the server's chat to a stranger's group or channel.
+     * <p>只接受见过面的目标是安全属性：{@code /qq bind} 不可能把服务器聊天接到陌生人的群/子频道上。
      */
     public synchronized List<String> bind(UnboundGroups.Seen target) {
         Path path = BridgeConfig.configPath(platform.configDir());

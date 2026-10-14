@@ -82,8 +82,17 @@ git tag v0.0.2-beta   && git push origin v0.0.2-beta    # 预发布（--prerelea
 
 `game-versions` 是**每个窗口一份**，写在各自 `平台/窗口/gradle.properties` 的 `publish_game_versions` 里
 （矩阵脚本读出来传给 mc-publish）。
-⚠️ spigot / paper 两份是例外：它们**一个 jar 覆盖 1.20.1 → 26.x**，所以写的是**并集**
-`[1.20.1, 1.20.2, 26.1, 26.2]` —— 只写 26.x 的话，1.20.1 的用户在 Modrinth 上搜不到。
+⚠️ spigot / paper 两份是例外：它们**一个 jar 覆盖 1.20.1 → 26.x**，所以写的是**范围**
+`>=1.20.1 <27` —— 只写 1.20.1 的话 26.x 的用户在 Modrinth 上搜不到；上界 `<27` 与描述符对齐
+（26.x → 27 是二进制不兼容，不该声称）。mc-publish v3.3+ 会自己把它展开成具体版本 tag。
+
+`environment` 则**不在这里** —— 六个窗口全是 `server`，**值一样的东西不该做成每窗口的属性**。
+它写在 `release.yml` 的 mc-publish 步骤上，一个常量：`environment: server`。
+
+⚠️ **必须显式给，不能靠推断。** CurseForge 要求每条文件至少选一个环境（Client / Server），
+否则 400 + `errorCode 1021`；而 mc-publish 的"从项目元数据文件推断"**只认 fabric / forge /
+neoforge / quilt** —— 插件的 `plugin.yml` 根本没有这个字段，推出来是**空数组**
+（`v0.0.2` 的 paper / spigot 就是这么挂的）。显式值会覆盖推断，所以将来新加的窗口也自动是对的。
 
 ## CI 跑在哪个镜像
 

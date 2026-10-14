@@ -1,35 +1,13 @@
 #!/usr/bin/env bash
+# 从目录树推导平台矩阵：**平台/窗口 = 一个含构建脚本的目录**，事实写在它的 gradle.properties 里。
+# 加一个窗口 = 建那个目录（+ settings.gradle.kts include 一行，构建拓扑保持显式），CI 零改动。
 #
-# 从目录树推导平台矩阵 —— **平台/窗口就是一个含构建脚本的目录**。
+# 每个窗口必须声明 publish_game_versions（声称覆盖哪些游戏版本）；可选 publish_loaders
+# 覆盖推导出来的 loader（默认就是平台名，Paper 额外加 Folia）。
 #
-# 以前这份清单是 action.yml 里手写的一串 add_row，加一个窗口要改四个地方
-# （settings.gradle.kts、根 gradle.properties、那个 action、release.yml 的产物路径），
-# 而且产物路径是硬编码的字符串，`archives_base_name` 一改就对不上。
-#
-# 现在"窗口"的事实跟着窗口目录走：
-#
-#     平台/窗口/gradle.properties     ← 构建事实 + publish_game_versions
-#
-# 这个脚本扫一遍目录，把矩阵算出来，喂给 strategy.matrix。
-# 加一个窗口 = 建一个目录（+ settings.gradle.kts 里 include 一行，那处是构建拓扑，保持显式）。
-#
-# 哪些是**推导**的（约定，不用写）：
-#   name        目录名（fabric-26.1）
-#   project     :平台:窗口（:fabric:fabric-26.1）
-#   jar         平台/窗口/build/libs/<archives_base_name>-<窗口>-*.jar（版本用通配，见下）
-#   loaders     平台名；Paper 额外声明 Folia（见 loaders_for）
-# 哪些是**声明**的（每个窗口的 gradle.properties 里）：
-#   publish_game_versions   这个 jar 声称覆盖哪些游戏版本（必需）
-#   publish_loaders         覆盖推导出来的 loader（可选，比如想改 Paper 的写法）
-#
-# 用法（本地也能跑，Git Bash 即可）：
-#   bash .github/scripts/platform-matrix.sh                      # 全部窗口
-#   INPUT_PLATFORMS=forge INPUT_VERSIONS=1.20.1 bash .github/scripts/platform-matrix.sh
-#
-# 输出：写进 $GITHUB_OUTPUT（同时打到 stdout）——
-#   version  mod_version（根 gradle.properties）
-#   matrix   {"include":[...]}，每行 {name,project,jar,loaders,game-versions}
-#   jars     每个窗口的产物路径，一行一个（release.yml 的 upload-artifact 用它）
+# 输出到 $GITHUB_OUTPUT（同时打到 stdout）：version / matrix / jars。
+# 本地跑：bash .github/scripts/platform-matrix.sh
+#         INPUT_PLATFORMS=forge INPUT_VERSIONS=1.20.1 bash .github/scripts/platform-matrix.sh
 set -euo pipefail
 
 ROOT_PROPS="${ROOT_PROPS:-gradle.properties}"
