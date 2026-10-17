@@ -25,7 +25,7 @@
 <!-- Download links: the Modrinth slug is confirmed as mcqq; the CurseForge one is still pending approval -->
 <p align="center">
 <a href="https://modrinth.com/mod/mcqq">⬇️ Modrinth</a>
-<!-- · <a href="https://www.curseforge.com/minecraft/mc-mods/mc-qq">⬇️ CurseForge</a> -->
+· <a href="https://www.curseforge.com/minecraft/mc-mods/mcqq">⬇️ CurseForge</a>
 · <a href="https://github.com/17TheWord/mcqq/issues">🐛 Report an issue</a>
 </p>
 
