@@ -289,15 +289,6 @@ templates:
 * [发布流程](docs/RELEASING.md)：项目发布与 CI 流程
 * [第三方组件](THIRD-PARTY.md)：打包组件及其许可证
 
-构建需要 **JDK 25**（把 `JAVA_HOME` 指向它）。26.x 的 fabric-loom / moddev 是跑在 Gradle daemon 里的插件，
-所以是 daemon 的 JVM 要 25 —— toolchain 代替不了。
-
-构建全部平台（core + fabric / neoforge / forge ×2 / paper / spigot）：
-
-```bash
-./gradlew build
-```
-
 ## 使用说明
 
 本项目仅提供 Minecraft 与 QQ 之间的消息和事件转发能力。请遵守相关法律法规及 QQ 开放平台规则，并对本项目的使用行为和发送内容负责。

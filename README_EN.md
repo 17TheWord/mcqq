@@ -289,12 +289,6 @@ Related documentation:
 * [Release process](docs/RELEASING.md): project release and CI process
 * [Third-party components](THIRD-PARTY.md): bundled components and their licences
 
-Build every platform (core + fabric / neoforge / forge ×2 / paper / spigot):
-
-```bash
-./gradlew build
-```
-
 ## Usage notice
 
 This project only provides message and event forwarding between Minecraft and QQ. Users must comply with applicable laws and regulations as well as the rules of the QQ Open Platform, and are responsible for the content sent through this project and for how they use it.
